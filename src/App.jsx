@@ -92,6 +92,39 @@ const DB = {
   deleteUser: async (id) => {
     await supa("DELETE", "cc_users", { filter: `id=eq.${id}` });
   },
+  // FIX: lightweight activity timestamp update — used on login and on request submission
+  touchActivity: async (id) => {
+    try {
+      await supa("PATCH", "cc_users", { filter: `id=eq.${id}`, body: { last_active: new Date().toISOString() } });
+    } catch (e) {
+      console.warn("touchActivity failed:", e.message);
+    }
+  },
+  // FIX: deletes employee accounts (never admins) inactive for 30+ days.
+  // "Inactive" = no login and no transport/dinner submission in 30 days.
+  // Falls back to created_at if last_active was never set (e.g. registered but never logged in).
+  cleanupInactiveEmployees: async () => {
+    try {
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+      const cutoff = Date.now() - THIRTY_DAYS_MS;
+      const rawUsers = await DB.getUsers();
+      const stale = rawUsers.filter(u => {
+        if (u.role === "admin") return false; // never auto-delete admins/team leaders
+        const ref = u.last_active || u.created_at;
+        if (!ref) return false;
+        return new Date(ref).getTime() < cutoff;
+      });
+      for (const u of stale) {
+        // clean up their submissions too, then the account itself
+        await supa("DELETE", "cc_apps", { filter: `user_id=eq.${u.id}` }).catch(() => {});
+        await supa("DELETE", "cc_users", { filter: `id=eq.${u.id}` }).catch(() => {});
+      }
+      return stale.length;
+    } catch (e) {
+      console.warn("cleanupInactiveEmployees failed:", e.message);
+      return 0;
+    }
+  },
   getSetting: async (key) => {
     const d = await supa("GET", "cc_settings", { filter: `select=value&key=eq.${key}`, single: true });
     return d?.value;
@@ -122,12 +155,13 @@ const dbUser = (u) => ({
   role: u.role, phone: u.phone || "",
   addresses: u.addresses || [], roster_data: u.rosterData || {},
   created_at: u.createdAt || todayStr(),
+  last_active: u.lastActive || new Date().toISOString(),
 });
 const userFromDb = (r) => ({
   id: r.id, name: r.name, empId: r.emp_id, password: r.password,
   role: r.role, phone: r.phone || "",
   addresses: r.addresses || [], rosterData: r.roster_data || {},
-  createdAt: r.created_at,
+  createdAt: r.created_at, lastActive: r.last_active,
 });
 const dbApp = (a) => ({
   id: a.id, user_id: a.userId, emp_id: a.empId, emp_name: a.empName,
@@ -290,6 +324,7 @@ function AuthScreen({ onLogin }) {
       }
       const user = userFromDb(raw);
       Session.set({ userId: user.id });
+      DB.touchActivity(user.id); // FIX: mark login activity (resets 30-day inactivity timer)
       setLoading(false);
       onLogin(user);
     } catch (e) {
@@ -608,6 +643,32 @@ function ProfilePage({ user, onUpdate }) {
   const [msg,     setMsg]     = useState(null);
   const a = k => e => setAf(p => ({ ...p, [k]: e.target.value }));
 
+  // FIX: change password state
+  const [curPw,     setCurPw]     = useState("");
+  const [newPw,     setNewPw]     = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwMsg,     setPwMsg]     = useState(null);
+  const [pwLoading, setPwLoading] = useState(false);
+
+  const changePassword = async () => {
+    if (!curPw || !newPw || !confirmPw) return setPwMsg({ t: "err", m: "All fields are required." });
+    if (curPw !== user.password) return setPwMsg({ t: "err", m: "Current password is incorrect." });
+    if (newPw.length < 4) return setPwMsg({ t: "err", m: "New password must be at least 4 characters." });
+    if (newPw !== confirmPw) return setPwMsg({ t: "err", m: "New passwords do not match." });
+    if (newPw === curPw) return setPwMsg({ t: "err", m: "New password must be different from the current one." });
+    setPwLoading(true);
+    try {
+      const updated = { ...user, password: newPw };
+      await DB.updateUser(updated);
+      onUpdate(updated);
+      setCurPw(""); setNewPw(""); setConfirmPw("");
+      setPwMsg({ t: "ok", m: "Password changed successfully." });
+    } catch (e) {
+      setPwMsg({ t: "err", m: "Failed: " + e.message });
+    }
+    setPwLoading(false);
+  };
+
   const savePhone = async () => {
     const updated = { ...user, phone };
     await DB.updateUser(updated);
@@ -659,6 +720,27 @@ function ProfilePage({ user, onUpdate }) {
             </div>
           </div>
         </div>
+      </div>
+      <div className="card">
+        <div className="sec-title">🔒 Change Password</div>
+        {pwMsg && <div className={`alert alert-${pwMsg.t === "err" ? "err" : "ok"}`}>{pwMsg.m}</div>}
+        <div className="g2">
+          <div className="col2">
+            <label className="label">Current Password<span className="req">*</span></label>
+            <input className="input" type="password" placeholder="••••••••" value={curPw} onChange={e => setCurPw(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">New Password<span className="req">*</span></label>
+            <input className="input" type="password" placeholder="••••••••" value={newPw} onChange={e => setNewPw(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Confirm New Password<span className="req">*</span></label>
+            <input className="input" type="password" placeholder="••••••••" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} onKeyDown={e => e.key === "Enter" && changePassword()} />
+          </div>
+        </div>
+        <button className="btn btn-cyan" style={{ marginTop: 12 }} onClick={changePassword} disabled={pwLoading}>
+          <Ico n="check" s={13} />{pwLoading ? "Updating…" : "Change Password"}
+        </button>
       </div>
       <div className="card">
         <div className="flex-b" style={{ marginBottom: 14 }}>
@@ -865,6 +947,7 @@ function TransportForm({ user }) {
       entryMode: mode, submittedAt: new Date().toISOString()
     };
     await DB.createApp(app);
+    DB.touchActivity(user.id); // FIX: mark submission activity (resets 30-day inactivity timer)
     // FIX: save form snapshot for success screen before resetting
     setSubmittedForm({ ...form, isDinnerOnly });
     setSubmitted(true);
@@ -2396,6 +2479,19 @@ export default function App() {
         finish(e.message);
       }
     })();
+
+    // FIX: run inactive-employee cleanup at most once every 24h (throttled via localStorage)
+    // so it doesn't hit the DB on every single page load. Runs in the background —
+    // never blocks the boot screen.
+    try {
+      const CLEANUP_KEY = "cc_last_cleanup_check";
+      const last = Number(localStorage.getItem(CLEANUP_KEY) || 0);
+      if (Date.now() - last > 24 * 60 * 60 * 1000) {
+        DB.cleanupInactiveEmployees().then(() => {
+          localStorage.setItem(CLEANUP_KEY, String(Date.now()));
+        });
+      }
+    } catch (e) { /* localStorage unavailable — skip cleanup silently */ }
 
     return () => { document.head.removeChild(el); clearTimeout(timer); };
   }, []);
