@@ -1,13 +1,60 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
+import emailjs from "@emailjs/browser";
+import bcrypt from "bcryptjs";
 
-// ─── Supabase REST client (no SDK — pure fetch) ───────────────────────────────
-const SUPA_URL  = "https://atdnqqwezsmvnpzfzkep.supabase.co";
-const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0ZG5xcXdlenNtdm5wemZ6a2VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MjM1NjksImV4cCI6MjA5NzE5OTU2OX0.zGAHiI11hH8_9-JXoMOKVkI1xaRBZf73O469CJlKtTk";
+// ─── EmailJS config ───────────────────────────────────────────────────────────
+const EMAILJS_SERVICE_ID  = "service_3s3vtsq";
+const EMAILJS_TEMPLATE_ID = "template_a32sv1q";
+const EMAILJS_PUBLIC_KEY  = "qKocC8xi1FyxVNJMl";
+
+// ─── Supabase REST client ─────────────────────────────────────────────────────
+// FIX: credentials now read from Vercel environment variables first,
+// falling back to the hardcoded values so the app still works if env vars
+// haven't been set up yet.
+const SUPA_URL  = import.meta.env.VITE_SUPA_URL  || "https://atdnqqwezsmvnpzfzkep.supabase.co";
+const SUPA_ANON = import.meta.env.VITE_SUPA_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0ZG5xcXdlenNtdm5wemZ6a2VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MjM1NjksImV4cCI6MjA5NzE5OTU2OX0.zGAHiI11hH8_9-JXoMOKVkI1xaRBZf73O469CJlKtTk";
 const HEADERS = {
   "Content-Type": "application/json",
   "apikey": SUPA_ANON,
   "Authorization": `Bearer ${SUPA_ANON}`,
+};
+
+// ─── Password helpers ─────────────────────────────────────────────────────────
+const BCRYPT_ROUNDS = 10;
+const isHashed    = (pw) => typeof pw === "string" && pw.startsWith("$2");
+const hashPw      = (pw) => bcrypt.hash(pw, BCRYPT_ROUNDS);
+const verifyPw    = async (plain, stored) => {
+  // FIX: handles both hashed (new) and plain-text (legacy) passwords.
+  // On successful plain-text match, we return a signal to migrate the hash.
+  if (isHashed(stored)) return { ok: await bcrypt.compare(plain, stored), needsMigration: false };
+  const ok = plain === stored;
+  return { ok, needsMigration: ok }; // plain match → needs upgrading
+};
+
+// ─── Login attempt lockout ────────────────────────────────────────────────────
+const MAX_ATTEMPTS  = 5;
+const LOCKOUT_MS    = 15 * 60 * 1000; // 15 minutes
+const LockoutStore  = {
+  key: (empId) => `cc_lock_${empId.toLowerCase()}`,
+  get: (empId) => { try { return JSON.parse(localStorage.getItem(LockoutStore.key(empId))) || { attempts: 0, lockedUntil: 0 }; } catch { return { attempts: 0, lockedUntil: 0 }; } },
+  set: (empId, data) => localStorage.setItem(LockoutStore.key(empId), JSON.stringify(data)),
+  clear: (empId) => localStorage.removeItem(LockoutStore.key(empId)),
+  isLocked: (empId) => {
+    const { lockedUntil } = LockoutStore.get(empId);
+    return lockedUntil > Date.now();
+  },
+  lockedSecondsLeft: (empId) => {
+    const { lockedUntil } = LockoutStore.get(empId);
+    return Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
+  },
+  recordFail: (empId) => {
+    const data = LockoutStore.get(empId);
+    data.attempts = (data.attempts || 0) + 1;
+    if (data.attempts >= MAX_ATTEMPTS) data.lockedUntil = Date.now() + LOCKOUT_MS;
+    LockoutStore.set(empId, data);
+    return data.attempts;
+  },
 };
 
 const supa = async (method, table, { filter = "", body = null, single = false } = {}) => {
@@ -89,6 +136,14 @@ const DB = {
     const d = await supa("GET", "cc_users", { filter: "select=*&role=eq.admin&order=created_at.desc" });
     return (d || []).map(userFromDb);
   },
+  // FIX: forgot-password OTP helpers
+  setResetOtp: async (id, code, expiresAt) => {
+    await supa("PATCH", "cc_users", { filter: `id=eq.${id}`, body: { reset_otp: code, reset_otp_expires: expiresAt } });
+  },
+  setPassword: async (id, password) => {
+    // resets password and clears any pending OTP in one step
+    await supa("PATCH", "cc_users", { filter: `id=eq.${id}`, body: { password, reset_otp: null, reset_otp_expires: null } });
+  },
   deleteUser: async (id) => {
     await supa("DELETE", "cc_users", { filter: `id=eq.${id}` });
   },
@@ -152,14 +207,14 @@ const DB = {
 // ─── Shape converters ─────────────────────────────────────────────────────────
 const dbUser = (u) => ({
   id: u.id, name: u.name, emp_id: u.empId, password: u.password,
-  role: u.role, phone: u.phone || "",
+  role: u.role, phone: u.phone || "", email: u.email || "",
   addresses: u.addresses || [], roster_data: u.rosterData || {},
   created_at: u.createdAt || todayStr(),
   last_active: u.lastActive || new Date().toISOString(),
 });
 const userFromDb = (r) => ({
   id: r.id, name: r.name, empId: r.emp_id, password: r.password,
-  role: r.role, phone: r.phone || "",
+  role: r.role, phone: r.phone || "", email: r.email || "",
   addresses: r.addresses || [], rosterData: r.roster_data || {},
   createdAt: r.created_at, lastActive: r.last_active,
 });
@@ -275,13 +330,52 @@ const Ico = ({ n, s = 16, c = "currentColor" }) => {
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════════════════════════════════════════
+// FIX: masks an email for display, e.g. "jo***@gmail.com"
+const maskEmail = (email) => {
+  if (!email || !email.includes("@")) return email || "";
+  const [name, domain] = email.split("@");
+  const visible = name.slice(0, 2);
+  return `${visible}${"*".repeat(Math.max(name.length - 2, 2))}@${domain}`;
+};
+
 function AuthScreen({ onLogin }) {
-  const [mode, setMode] = useState("login");
-  const [f, setF] = useState({ name: "", empId: "", phone: "", password: "", confirm: "" });
+  const [mode, setMode] = useState("login"); // login | register | forgot
+  const [f, setF] = useState({ name: "", empId: "", phone: "", email: "", password: "", confirm: "" });
   const [msg, setMsg] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isWhitelisted, setIsWhitelisted] = useState(false);
   const upd = k => e => setF(p => ({ ...p, [k]: e.target.value }));
+
+  // FIX: registration OTP state
+  const [regStep,       setRegStep]       = useState("form"); // form | verify
+  const [regOtp,        setRegOtp]        = useState("");
+  const [regOtpCode,    setRegOtpCode]    = useState("");
+  const [regOtpExpiry,  setRegOtpExpiry]  = useState(0);
+  const [regResendCD,   setRegResendCD]   = useState(0);
+  const [regPending,    setRegPending]    = useState(null); // holds user object pending creation
+
+  useEffect(() => {
+    if (regResendCD <= 0) return;
+    const t = setTimeout(() => setRegResendCD(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [regResendCD]);
+
+  // FIX: forgot-password flow state
+  const [fgStep, setFgStep] = useState("request"); // request | verify | done
+  const [fgEmpId, setFgEmpId] = useState("");
+  const [fgUser, setFgUser] = useState(null);
+  const [fgOtp, setFgOtp] = useState("");
+  const [fgNewPw, setFgNewPw] = useState("");
+  const [fgConfirmPw, setFgConfirmPw] = useState("");
+  const [fgMsg, setFgMsg] = useState(null);
+  const [fgLoading, setFgLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
 
   useEffect(() => {
     if (!f.empId || f.empId.length < 2) { setIsWhitelisted(false); return; }
@@ -293,44 +387,192 @@ function AuthScreen({ onLogin }) {
   }, [f.empId]);
 
   const doRegister = async () => {
-    if (!f.name || !f.empId || !f.password) return setMsg({ t: "err", m: "Name, Employee ID and password are required." });
+    if (!f.name || !f.empId || !f.email || !f.password) return setMsg({ t: "err", m: "Name, Employee ID, Email and password are required." });
+    if (!f.email.includes("@") || !f.email.includes(".")) return setMsg({ t: "err", m: "Please enter a valid email address." });
     if (f.password !== f.confirm) return setMsg({ t: "err", m: "Passwords do not match." });
+    if (f.password.length < 4) return setMsg({ t: "err", m: "Password must be at least 4 characters." });
     setLoading(true);
     try {
       const existing = await DB.getUserByEmpId(f.empId);
       if (existing) { setLoading(false); return setMsg({ t: "err", m: "Employee ID already registered." }); }
-      const user = {
-        id: uid(), name: f.name, empId: f.empId, phone: f.phone, password: f.password,
+      // FIX: send OTP to email before creating account
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const expiry = Date.now() + 10 * 60 * 1000;
+      await sendOtpEmail(f.email, f.name, code);
+      const hashedPassword = await hashPw(f.password);
+      setRegPending({
+        id: uid(), name: f.name, empId: f.empId, phone: f.phone, email: f.email,
+        password: hashedPassword,
         role: isWhitelisted ? "admin" : "employee", addresses: [], rosterData: {}, createdAt: todayStr()
-      };
-      await DB.createUser(user);
+      });
+      setRegOtpCode(code);
+      setRegOtpExpiry(expiry);
+      setRegOtp("");
+      setRegResendCD(30);
+      setRegStep("verify");
+      setMsg({ t: "ok", m: `Verification code sent to ${maskEmail(f.email)}. Valid for 10 minutes.` });
+    } catch (e) {
+      setMsg({ t: "err", m: "Registration failed: " + e.message });
+    }
+    setLoading(false);
+  };
+
+  const verifyRegOtp = async () => {
+    if (!regOtp) return setMsg({ t: "err", m: "Enter the code sent to your email." });
+    if (regOtp !== regOtpCode) return setMsg({ t: "err", m: "Incorrect code. Please try again." });
+    if (Date.now() > regOtpExpiry) return setMsg({ t: "err", m: "Code expired. Please go back and try again." });
+    setLoading(true);
+    try {
+      await DB.createUser(regPending);
       setLoading(false);
       setMsg({ t: "ok", m: "Account created! Sign in below." });
       setMode("login");
-      setF({ name: "", empId: "", phone: "", password: "", confirm: "" });
+      setRegStep("form");
+      setRegPending(null);
+      setF({ name: "", empId: "", phone: "", email: "", password: "", confirm: "" });
     } catch (e) {
       setLoading(false);
-      setMsg({ t: "err", m: "Registration failed: " + e.message });
+      setMsg({ t: "err", m: "Failed to create account: " + e.message });
     }
   };
 
+  const resendRegOtp = async () => {
+    if (regResendCD > 0 || !regPending) return;
+    setLoading(true);
+    try {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const expiry = Date.now() + 10 * 60 * 1000;
+      await sendOtpEmail(regPending.email, regPending.name, code);
+      setRegOtpCode(code);
+      setRegOtpExpiry(expiry);
+      setRegResendCD(30);
+      setMsg({ t: "ok", m: "New code sent." });
+    } catch (e) {
+      setMsg({ t: "err", m: "Could not resend: " + e.message });
+    }
+    setLoading(false);
+  };
+
   const doLogin = async () => {
+    // FIX: check lockout before even hitting the database
+    if (LockoutStore.isLocked(f.empId)) {
+      const secs = LockoutStore.lockedSecondsLeft(f.empId);
+      const mins = Math.ceil(secs / 60);
+      return setMsg({ t: "err", m: `Too many failed attempts. Try again in ${mins} minute${mins !== 1 ? "s" : ""}.` });
+    }
     setLoading(true);
     try {
       const raw = await DB.getUserByEmpId(f.empId);
-      if (!raw || raw.password !== f.password) {
+      if (!raw) {
+        LockoutStore.recordFail(f.empId);
         setLoading(false);
         return setMsg({ t: "err", m: "Invalid Employee ID or password." });
       }
+      const { ok, needsMigration } = await verifyPw(f.password, raw.password);
+      if (!ok) {
+        const attempts = LockoutStore.recordFail(f.empId);
+        const remaining = MAX_ATTEMPTS - attempts;
+        setLoading(false);
+        if (remaining <= 0) return setMsg({ t: "err", m: `Too many failed attempts. Account locked for 15 minutes.` });
+        return setMsg({ t: "err", m: `Invalid Employee ID or password. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.` });
+      }
+      // FIX: auto-migrate plain-text password to bcrypt hash on first successful login
+      if (needsMigration) {
+        const hashed = await hashPw(f.password);
+        await DB.setPassword(raw.id, hashed);
+      }
+      LockoutStore.clear(f.empId); // FIX: clear lockout on successful login
       const user = userFromDb(raw);
       Session.set({ userId: user.id });
-      DB.touchActivity(user.id); // FIX: mark login activity (resets 30-day inactivity timer)
+      DB.touchActivity(user.id);
       setLoading(false);
       onLogin(user);
     } catch (e) {
       setLoading(false);
       setMsg({ t: "err", m: "Login failed: " + e.message });
     }
+  };
+
+  // FIX: forgot-password handlers
+  const switchToForgot = () => {
+    setMode("forgot"); setMsg(null);
+    setFgStep("request"); setFgEmpId(""); setFgUser(null);
+    setFgOtp(""); setFgNewPw(""); setFgConfirmPw(""); setFgMsg(null);
+    setResendCooldown(0);
+  };
+
+  const backToLogin = () => {
+    setMode("login"); setFgMsg(null);
+  };
+
+  const sendOtpEmail = async (toEmail, toName, code) => {
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: toEmail,
+      to_name: toName,
+      otp_code: code,
+    }, EMAILJS_PUBLIC_KEY);
+  };
+
+  const requestReset = async () => {
+    if (!fgEmpId) return setFgMsg({ t: "err", m: "Enter your Employee ID." });
+    setFgLoading(true);
+    try {
+      const raw = await DB.getUserByEmpId(fgEmpId);
+      if (!raw) { setFgLoading(false); return setFgMsg({ t: "err", m: "No account found with that Employee ID." }); }
+      if (!raw.email) {
+        setFgLoading(false);
+        return setFgMsg({ t: "err", m: "No email is on file for this account. Please ask your Admin/Team Leader to reset your password instead." });
+      }
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      await DB.setResetOtp(raw.id, code, expires);
+      await sendOtpEmail(raw.email, raw.name, code);
+      setFgUser(raw);
+      setFgStep("verify");
+      setResendCooldown(30);
+      setFgMsg({ t: "ok", m: `Code sent to ${maskEmail(raw.email)}. Check your inbox (and spam folder) — it's valid for 10 minutes.` });
+    } catch (e) {
+      setFgMsg({ t: "err", m: "Could not send code: " + e.message });
+    }
+    setFgLoading(false);
+  };
+
+  const resendCode = async () => {
+    if (resendCooldown > 0 || !fgUser) return;
+    setFgLoading(true);
+    try {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      await DB.setResetOtp(fgUser.id, code, expires);
+      await sendOtpEmail(fgUser.email, fgUser.name, code);
+      setResendCooldown(30);
+      setFgMsg({ t: "ok", m: "New code sent." });
+    } catch (e) {
+      setFgMsg({ t: "err", m: "Could not resend: " + e.message });
+    }
+    setFgLoading(false);
+  };
+
+  const verifyAndReset = async () => {
+    if (!fgOtp) return setFgMsg({ t: "err", m: "Enter the code sent to your email." });
+    if (!fgNewPw || !fgConfirmPw) return setFgMsg({ t: "err", m: "Enter and confirm your new password." });
+    if (fgNewPw.length < 4) return setFgMsg({ t: "err", m: "New password must be at least 4 characters." });
+    if (fgNewPw !== fgConfirmPw) return setFgMsg({ t: "err", m: "Passwords do not match." });
+    setFgLoading(true);
+    try {
+      const fresh = await DB.getUserByEmpId(fgEmpId); // re-check the latest OTP straight from the DB
+      if (!fresh || !fresh.reset_otp) { setFgLoading(false); return setFgMsg({ t: "err", m: "Code expired or not found. Please request a new one." }); }
+      if (fresh.reset_otp !== fgOtp) { setFgLoading(false); return setFgMsg({ t: "err", m: "Incorrect code." }); }
+      if (new Date(fresh.reset_otp_expires).getTime() < Date.now()) { setFgLoading(false); return setFgMsg({ t: "err", m: "Code expired. Please request a new one." }); }
+      // FIX: hash new password before saving
+      const hashed = await hashPw(fgNewPw);
+      await DB.setPassword(fresh.id, hashed);
+      setFgStep("done");
+      setFgMsg(null);
+    } catch (e) {
+      setFgMsg({ t: "err", m: "Failed: " + e.message });
+    }
+    setFgLoading(false);
   };
 
   return (
@@ -346,19 +588,28 @@ function AuthScreen({ onLogin }) {
           </div>
         </div>
         <div className="card">
-          <div className="tab-row">
-            {[["login", "Sign In"], ["register", "Create Account"]].map(([m, lbl]) => (
-              <button key={m} className={`tab-btn${mode === m ? " active" : ""}`} onClick={() => { setMode(m); setMsg(null); }}>{lbl}</button>
-            ))}
-          </div>
-          {msg && <div className={`alert alert-${msg.t === "err" ? "err" : "ok"}`}>{msg.m}</div>}
-          {mode === "login" ? (
+          {mode !== "forgot" && (
+            <div className="tab-row">
+              {[["login", "Sign In"], ["register", "Create Account"]].map(([m, lbl]) => (
+                <button key={m} className={`tab-btn${mode === m ? " active" : ""}`} onClick={() => { setMode(m); setMsg(null); }}>{lbl}</button>
+              ))}
+            </div>
+          )}
+
+          {mode !== "forgot" && msg && <div className={`alert alert-${msg.t === "err" ? "err" : "ok"}`}>{msg.m}</div>}
+
+          {mode === "login" && (
             <div className="stack-sm">
               <div><label className="label">Employee ID</label><input className="input" placeholder="e.g. EMP001" value={f.empId} onChange={upd("empId")} /></div>
               <div><label className="label">Password</label><input className="input" type="password" placeholder="••••••••" value={f.password} onChange={upd("password")} onKeyDown={e => e.key === "Enter" && doLogin()} /></div>
               <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12, marginTop: 4 }} onClick={doLogin} disabled={loading}>{loading ? "Signing in…" : "Sign In"}</button>
+              <div style={{ textAlign: "center", marginTop: 4 }}>
+                <button onClick={switchToForgot} style={{ background: "none", border: "none", cursor: "pointer", color: C.cyan, fontSize: 12, fontWeight: 700 }}>Forgot password?</button>
+              </div>
             </div>
-          ) : (
+          )}
+
+          {mode === "register" && regStep === "form" && (
             <div className="stack-sm">
               <div><label className="label">Full Name<span className="req">*</span></label><input className="input" placeholder="Your full name" value={f.name} onChange={upd("name")} /></div>
               <div className="g2">
@@ -373,9 +624,88 @@ function AuthScreen({ onLogin }) {
                 </div>
                 <div><label className="label">Contact No.</label><input className="input" placeholder="+94 77 000 0000" value={f.phone} onChange={upd("phone")} /></div>
               </div>
+              <div>
+                <label className="label">Email<span className="req">*</span></label>
+                <input className="input" type="email" placeholder="you@example.com" value={f.email} onChange={upd("email")} />
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>A verification code will be sent to this email.</div>
+              </div>
               <div><label className="label">Password<span className="req">*</span></label><input className="input" type="password" placeholder="••••••••" value={f.password} onChange={upd("password")} /></div>
               <div><label className="label">Confirm Password<span className="req">*</span></label><input className="input" type="password" placeholder="••••••••" value={f.confirm} onChange={upd("confirm")} /></div>
-              <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12, marginTop: 4 }} onClick={doRegister} disabled={loading}>{loading ? "Creating…" : "Create Account"}</button>
+              <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12, marginTop: 4 }} onClick={doRegister} disabled={loading}>{loading ? "Sending code…" : "Create Account"}</button>
+            </div>
+          )}
+
+          {mode === "register" && regStep === "verify" && (
+            <div className="stack-sm">
+              <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
+                <div style={{ fontSize: 32, marginBottom: 6 }}>📧</div>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Verify your email</div>
+                <div style={{ fontSize: 12, color: C.muted }}>Enter the 6-digit code sent to <b>{maskEmail(f.email)}</b></div>
+              </div>
+              <div>
+                <label className="label">Verification Code</label>
+                <input className="input" placeholder="••••••" maxLength={6} value={regOtp}
+                  onChange={e => setRegOtp(e.target.value.replace(/\D/g, ""))}
+                  onKeyDown={e => e.key === "Enter" && verifyRegOtp()}
+                  style={{ textAlign: "center", fontSize: 22, fontWeight: 800, letterSpacing: 8 }} />
+              </div>
+              <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12 }} onClick={verifyRegOtp} disabled={loading}>
+                {loading ? "Verifying…" : "Verify & Create Account"}
+              </button>
+              <div style={{ textAlign: "center" }}>
+                <button onClick={resendRegOtp} disabled={regResendCD > 0 || loading}
+                  style={{ background: "none", border: "none", cursor: regResendCD > 0 ? "default" : "pointer", color: regResendCD > 0 ? C.muted : C.cyan, fontSize: 12, fontWeight: 700 }}>
+                  {regResendCD > 0 ? `Resend code in ${regResendCD}s` : "Resend code"}
+                </button>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <button onClick={() => { setRegStep("form"); setMsg(null); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 12, fontWeight: 700 }}>
+                  ← Back to form
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === "forgot" && (
+            <div className="stack-sm">
+              <div className="sec-title" style={{ marginBottom: 4 }}>🔑 Reset Password</div>
+              {fgMsg && <div className={`alert alert-${fgMsg.t === "err" ? "err" : "ok"}`}>{fgMsg.m}</div>}
+
+              {fgStep === "request" && (
+                <>
+                  <div><label className="label">Employee ID</label><input className="input" placeholder="e.g. EMP001" value={fgEmpId} onChange={e => setFgEmpId(e.target.value)} onKeyDown={e => e.key === "Enter" && requestReset()} /></div>
+                  <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12, marginTop: 4 }} onClick={requestReset} disabled={fgLoading}>{fgLoading ? "Sending…" : "Send Code"}</button>
+                </>
+              )}
+
+              {fgStep === "verify" && (
+                <>
+                  <div><label className="label">6-Digit Code</label><input className="input" placeholder="••••••" maxLength={6} value={fgOtp} onChange={e => setFgOtp(e.target.value.replace(/\D/g, ""))} /></div>
+                  <div><label className="label">New Password</label><input className="input" type="password" placeholder="••••••••" value={fgNewPw} onChange={e => setFgNewPw(e.target.value)} /></div>
+                  <div><label className="label">Confirm New Password</label><input className="input" type="password" placeholder="••••••••" value={fgConfirmPw} onChange={e => setFgConfirmPw(e.target.value)} onKeyDown={e => e.key === "Enter" && verifyAndReset()} /></div>
+                  <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12, marginTop: 4 }} onClick={verifyAndReset} disabled={fgLoading}>{fgLoading ? "Resetting…" : "Reset Password"}</button>
+                  <div style={{ textAlign: "center" }}>
+                    <button onClick={resendCode} disabled={resendCooldown > 0 || fgLoading} style={{ background: "none", border: "none", cursor: resendCooldown > 0 ? "default" : "pointer", color: resendCooldown > 0 ? C.muted : C.cyan, fontSize: 12, fontWeight: 700 }}>
+                      {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {fgStep === "done" && (
+                <div style={{ textAlign: "center", padding: "12px 0" }}>
+                  <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.greenLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                    <Ico n="check" s={26} c={C.green} />
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Password updated!</div>
+                  <div style={{ fontSize: 13, color: C.muted }}>You can now sign in with your new password.</div>
+                </div>
+              )}
+
+              <div style={{ textAlign: "center", marginTop: 4 }}>
+                <button onClick={backToLogin} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 12, fontWeight: 700 }}>← Back to Sign In</button>
+              </div>
             </div>
           )}
         </div>
@@ -643,28 +973,86 @@ function ProfilePage({ user, onUpdate }) {
   const [msg,     setMsg]     = useState(null);
   const a = k => e => setAf(p => ({ ...p, [k]: e.target.value }));
 
-  // FIX: change password state
+  // FIX: change password OTP state
   const [curPw,     setCurPw]     = useState("");
   const [newPw,     setNewPw]     = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [pwMsg,     setPwMsg]     = useState(null);
   const [pwLoading, setPwLoading] = useState(false);
+  const [pwStep,    setPwStep]    = useState("form"); // form | verify
+  const [pwOtp,     setPwOtp]     = useState("");
+  const [pwOtpCode, setPwOtpCode] = useState("");
+  const [pwOtpExpiry, setPwOtpExpiry] = useState(0);
+  const [pwResendCD,  setPwResendCD]  = useState(0);
+
+  useEffect(() => {
+    if (pwResendCD <= 0) return;
+    const t = setTimeout(() => setPwResendCD(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [pwResendCD]);
 
   const changePassword = async () => {
     if (!curPw || !newPw || !confirmPw) return setPwMsg({ t: "err", m: "All fields are required." });
-    if (curPw !== user.password) return setPwMsg({ t: "err", m: "Current password is incorrect." });
     if (newPw.length < 4) return setPwMsg({ t: "err", m: "New password must be at least 4 characters." });
     if (newPw !== confirmPw) return setPwMsg({ t: "err", m: "New passwords do not match." });
-    if (newPw === curPw) return setPwMsg({ t: "err", m: "New password must be different from the current one." });
     setPwLoading(true);
     try {
-      const updated = { ...user, password: newPw };
-      await DB.updateUser(updated);
-      onUpdate(updated);
-      setCurPw(""); setNewPw(""); setConfirmPw("");
+      const { ok } = await verifyPw(curPw, user.password);
+      if (!ok) { setPwLoading(false); return setPwMsg({ t: "err", m: "Current password is incorrect." }); }
+      const { ok: sameAsCurrent } = await verifyPw(newPw, user.password);
+      if (sameAsCurrent) { setPwLoading(false); return setPwMsg({ t: "err", m: "New password must be different from the current one." }); }
+      if (!user.email) { setPwLoading(false); return setPwMsg({ t: "err", m: "No email on file — ask your Admin to reset your password." }); }
+      // FIX: send OTP to their registered email before allowing password change
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const expiry = Date.now() + 10 * 60 * 1000;
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        to_email: user.email, to_name: user.name, otp_code: code,
+      }, EMAILJS_PUBLIC_KEY);
+      setPwOtpCode(code);
+      setPwOtpExpiry(expiry);
+      setPwOtp("");
+      setPwResendCD(30);
+      setPwStep("verify");
+      setPwMsg({ t: "ok", m: `Verification code sent to ${maskEmail(user.email)}. Valid for 10 minutes.` });
+    } catch (e) {
+      setPwMsg({ t: "err", m: "Failed: " + e.message });
+    }
+    setPwLoading(false);
+  };
+
+  const verifyPwOtp = async () => {
+    if (!pwOtp) return setPwMsg({ t: "err", m: "Enter the code sent to your email." });
+    if (pwOtp !== pwOtpCode) return setPwMsg({ t: "err", m: "Incorrect code. Please try again." });
+    if (Date.now() > pwOtpExpiry) return setPwMsg({ t: "err", m: "Code expired. Please start over." });
+    setPwLoading(true);
+    try {
+      const hashed = await hashPw(newPw);
+      await DB.setPassword(user.id, hashed);
+      onUpdate({ ...user, password: hashed });
+      setCurPw(""); setNewPw(""); setConfirmPw(""); setPwOtp("");
+      setPwStep("form");
       setPwMsg({ t: "ok", m: "Password changed successfully." });
     } catch (e) {
       setPwMsg({ t: "err", m: "Failed: " + e.message });
+    }
+    setPwLoading(false);
+  };
+
+  const resendPwOtp = async () => {
+    if (pwResendCD > 0) return;
+    setPwLoading(true);
+    try {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const expiry = Date.now() + 10 * 60 * 1000;
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        to_email: user.email, to_name: user.name, otp_code: code,
+      }, EMAILJS_PUBLIC_KEY);
+      setPwOtpCode(code);
+      setPwOtpExpiry(expiry);
+      setPwResendCD(30);
+      setPwMsg({ t: "ok", m: "New code sent." });
+    } catch (e) {
+      setPwMsg({ t: "err", m: "Could not resend: " + e.message });
     }
     setPwLoading(false);
   };
@@ -712,7 +1100,11 @@ function ProfilePage({ user, onUpdate }) {
         <div className="g2">
           <div><label className="label">Full Name</label><input className="input input-ro" readOnly value={user.name} /></div>
           <div><label className="label">Employee ID</label><input className="input input-ro" readOnly value={user.empId} /></div>
-          <div style={{ gridColumn: "1/-1" }}>
+          <div>
+            <label className="label">Email</label>
+            <input className="input input-ro" readOnly value={user.email || "Not set — used for password recovery"} />
+          </div>
+          <div>
             <label className="label">Contact Number<span className="req">*</span></label>
             <div style={{ display: "flex", gap: 8 }}>
               <input className="input" placeholder="+94 77 000 0000" value={phone} onChange={e => setPhone(e.target.value)} />
@@ -724,23 +1116,53 @@ function ProfilePage({ user, onUpdate }) {
       <div className="card">
         <div className="sec-title">🔒 Change Password</div>
         {pwMsg && <div className={`alert alert-${pwMsg.t === "err" ? "err" : "ok"}`}>{pwMsg.m}</div>}
-        <div className="g2">
-          <div className="col2">
-            <label className="label">Current Password<span className="req">*</span></label>
-            <input className="input" type="password" placeholder="••••••••" value={curPw} onChange={e => setCurPw(e.target.value)} />
+        {pwStep === "form" && (
+          <div className="g2">
+            <div className="col2">
+              <label className="label">Current Password<span className="req">*</span></label>
+              <input className="input" type="password" placeholder="••••••••" value={curPw} onChange={e => setCurPw(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">New Password<span className="req">*</span></label>
+              <input className="input" type="password" placeholder="••••••••" value={newPw} onChange={e => setNewPw(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Confirm New Password<span className="req">*</span></label>
+              <input className="input" type="password" placeholder="••••••••" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
+            </div>
+            <div className="col2">
+              <button className="btn btn-cyan" onClick={changePassword} disabled={pwLoading}>
+                <Ico n="check" s={13} />{pwLoading ? "Sending code…" : "Change Password"}
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="label">New Password<span className="req">*</span></label>
-            <input className="input" type="password" placeholder="••••••••" value={newPw} onChange={e => setNewPw(e.target.value)} />
+        )}
+        {pwStep === "verify" && (
+          <div className="stack-sm">
+            <div style={{ textAlign: "center", padding: "4px 0 8px" }}>
+              <div style={{ fontSize: 28, marginBottom: 6 }}>📧</div>
+              <div style={{ fontSize: 13, color: C.muted }}>Enter the 6-digit code sent to <b>{maskEmail(user.email)}</b></div>
+            </div>
+            <div>
+              <label className="label">Verification Code</label>
+              <input className="input" placeholder="••••••" maxLength={6} value={pwOtp}
+                onChange={e => setPwOtp(e.target.value.replace(/\D/g, ""))}
+                onKeyDown={e => e.key === "Enter" && verifyPwOtp()}
+                style={{ textAlign: "center", fontSize: 22, fontWeight: 800, letterSpacing: 8 }} />
+            </div>
+            <button className="btn btn-cyan" onClick={verifyPwOtp} disabled={pwLoading}>
+              <Ico n="check" s={13} />{pwLoading ? "Verifying…" : "Confirm & Change Password"}
+            </button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button onClick={() => { setPwStep("form"); setPwMsg(null); }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 12, fontWeight: 700 }}>← Back</button>
+              <button onClick={resendPwOtp} disabled={pwResendCD > 0 || pwLoading}
+                style={{ background: "none", border: "none", cursor: pwResendCD > 0 ? "default" : "pointer", color: pwResendCD > 0 ? C.muted : C.cyan, fontSize: 12, fontWeight: 700 }}>
+                {pwResendCD > 0 ? `Resend in ${pwResendCD}s` : "Resend code"}
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="label">Confirm New Password<span className="req">*</span></label>
-            <input className="input" type="password" placeholder="••••••••" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} onKeyDown={e => e.key === "Enter" && changePassword()} />
-          </div>
-        </div>
-        <button className="btn btn-cyan" style={{ marginTop: 12 }} onClick={changePassword} disabled={pwLoading}>
-          <Ico n="check" s={13} />{pwLoading ? "Updating…" : "Change Password"}
-        </button>
+        )}
       </div>
       <div className="card">
         <div className="flex-b" style={{ marginBottom: 14 }}>
@@ -2090,6 +2512,10 @@ function AdminDashboard({ user, onLogout }) {
   const [supplierEdit, setSupplierEdit]= useState(false);
   const [supplierDraft,setSupplierDraft]=useState("PICKME Food");
   const [users,        setUsers]       = useState([]);
+  // FIX: admin "Reset Password" fallback state
+  const [resetPwUserId, setResetPwUserId] = useState(null);
+  const [resetPwValue,  setResetPwValue]  = useState("");
+  const [resetPwMsg,    setResetPwMsg]    = useState(null);
   // FIX: track admin's own user state so roster/profile updates persist in session
   const [adminUser,    setAdminUser]   = useState(user);
 
@@ -2141,6 +2567,25 @@ function AdminDashboard({ user, onLogout }) {
     await DB.deleteUser(id);
     setAdmins(prev => prev.filter(a => a.id !== id));
     setConfirmDeleteAdmin(null);
+  };
+
+  // FIX: admin can directly set a new password for an employee — no email/OTP needed.
+  // This is the fallback path when an employee's reset email never arrives.
+  const resetEmployeePassword = async (u) => {
+    if (!resetPwValue || resetPwValue.length < 4) {
+      setResetPwMsg({ t: "err", m: "Password must be at least 4 characters." });
+      return;
+    }
+    try {
+      // FIX: hash before saving, same as all other password paths
+      const hashed = await hashPw(resetPwValue);
+      await DB.setPassword(u.id, hashed);
+      setResetPwMsg({ t: "ok", m: `Password reset for ${u.name}.` });
+      setResetPwUserId(null);
+      setResetPwValue("");
+    } catch (e) {
+      setResetPwMsg({ t: "err", m: "Failed: " + e.message });
+    }
   };
 
   const exportCSV = () => {
@@ -2279,21 +2724,38 @@ function AdminDashboard({ user, onLogout }) {
         {tab === "employees" && (
           <div className="stack">
             <div><div className="page-title">Employees</div><div className="page-sub">{users.length} registered employee(s).</div></div>
+            {resetPwMsg && <div className={`alert alert-${resetPwMsg.t === "err" ? "err" : "ok"}`}>{resetPwMsg.m}</div>}
             <div className="card-0">
               <table className="tbl">
-                <thead><tr><th>Emp ID</th><th>Name</th><th>Contact</th><th>Saved Addresses</th><th>Roster Months</th><th>Joined</th></tr></thead>
+                <thead><tr><th>Emp ID</th><th>Name</th><th>Contact</th><th>Email</th><th>Saved Addresses</th><th>Roster Months</th><th>Joined</th><th>Action</th></tr></thead>
                 <tbody>
                   {users.map(u => (
                     <tr key={u.id}>
                       <td style={{ fontWeight: 700 }}>{u.empId}</td>
                       <td>{u.name}</td>
                       <td style={{ fontSize: 12 }}>{u.phone || "—"}</td>
+                      <td style={{ fontSize: 12 }}>{u.email || <span style={{ color: C.border }}>Not set</span>}</td>
                       <td>{(u.addresses || []).map(a => <span key={a.id} className="badge badge-cyan" style={{ marginRight: 4 }}>{a.label}</span>)}</td>
                       <td>{Object.keys(u.rosterData || {}).map(mk => <span key={mk} className="badge badge-grey" style={{ marginRight: 4 }}>{mk}</span>)}</td>
                       <td style={{ fontSize: 12, color: C.muted }}>{u.createdAt}</td>
+                      <td>
+                        {resetPwUserId === u.id ? (
+                          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                            <input className="input" type="password" placeholder="New password" style={{ padding: "4px 8px", fontSize: 12, width: 110 }}
+                              value={resetPwValue} onChange={e => setResetPwValue(e.target.value)}
+                              onKeyDown={e => e.key === "Enter" && resetEmployeePassword(u)} autoFocus />
+                            <button className="btn btn-sm btn-cyan" onClick={() => resetEmployeePassword(u)}><Ico n="check" s={11} /></button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => { setResetPwUserId(null); setResetPwValue(""); }}>✕</button>
+                          </div>
+                        ) : (
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setResetPwUserId(u.id); setResetPwValue(""); setResetPwMsg(null); }}>
+                            <Ico n="edit" s={11} /> Reset Password
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
-                  {!users.length && <tr><td colSpan={6} style={{ textAlign: "center", color: C.muted, padding: 24 }}>No employees registered yet.</td></tr>}
+                  {!users.length && <tr><td colSpan={8} style={{ textAlign: "center", color: C.muted, padding: 24 }}>No employees registered yet.</td></tr>}
                 </tbody>
               </table>
             </div>
