@@ -4,7 +4,7 @@ import emailjs from "@emailjs/browser";
 import bcrypt from "bcryptjs";
 
 // ─── EmailJS config ───────────────────────────────────────────────────────────
-const EMAILJS_SERVICE_ID  = "service_3s3vtsq";
+const EMAILJS_SERVICE_ID  = "service_bq4x4x5";
 const EMAILJS_TEMPLATE_ID = "template_a32sv1q";
 const EMAILJS_PUBLIC_KEY  = "qKocC8xi1FyxVNJMl";
 
