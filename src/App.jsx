@@ -180,6 +180,40 @@ const DB = {
       return 0;
     }
   },
+  // FIX: auto-delete transport/dinner submissions older than 90 days
+  // and remove roster months older than 60 days from every user's roster_data.
+  // Keeps the database lean without any manual intervention.
+  cleanupOldData: async () => {
+    try {
+      const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+      const SIXTY_DAYS_MS  = 60 * 24 * 60 * 60 * 1000;
+
+      // 1. Delete cc_apps submissions older than 90 days
+      const submissionCutoff = new Date(Date.now() - NINETY_DAYS_MS);
+      const submissionCutoffStr = submissionCutoff.toISOString().split("T")[0];
+      await supa("DELETE", "cc_apps", { filter: `date=lt.${submissionCutoffStr}` }).catch(() => {});
+
+      // 2. Strip roster months older than 60 days from every user's roster_data
+      const rosterCutoff = new Date(Date.now() - SIXTY_DAYS_MS);
+      const rosterCutoffKey = `${rosterCutoff.getFullYear()}-${String(rosterCutoff.getMonth() + 1).padStart(2, "0")}`;
+      const rawUsers = await DB.getUsers();
+      for (const u of rawUsers) {
+        const rd = u.roster_data || {};
+        const keys = Object.keys(rd);
+        const freshKeys = keys.filter(k => k >= rosterCutoffKey);
+        if (freshKeys.length < keys.length) {
+          const trimmed = {};
+          freshKeys.forEach(k => { trimmed[k] = rd[k]; });
+          await supa("PATCH", "cc_users", {
+            filter: `id=eq.${u.id}`,
+            body: { roster_data: trimmed }
+          }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn("cleanupOldData failed:", e.message);
+    }
+  },
   getSetting: async (key) => {
     const d = await supa("GET", "cc_settings", { filter: `select=value&key=eq.${key}`, single: true });
     return d?.value;
@@ -389,6 +423,7 @@ function AuthScreen({ onLogin }) {
   const doRegister = async () => {
     if (!f.name || !f.empId || !f.email || !f.password) return setMsg({ t: "err", m: "Name, Employee ID, Email and password are required." });
     if (!f.email.includes("@") || !f.email.includes(".")) return setMsg({ t: "err", m: "Please enter a valid email address." });
+    if (!f.email.toLowerCase().endsWith("@mobitel.lk")) return setMsg({ t: "err", m: "Only @mobitel.lk email addresses are allowed." });
     if (f.password !== f.confirm) return setMsg({ t: "err", m: "Passwords do not match." });
     if (f.password.length < 4) return setMsg({ t: "err", m: "Password must be at least 4 characters." });
     setLoading(true);
@@ -626,8 +661,8 @@ function AuthScreen({ onLogin }) {
               </div>
               <div>
                 <label className="label">Email<span className="req">*</span></label>
-                <input className="input" type="email" placeholder="you@example.com" value={f.email} onChange={upd("email")} />
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>A verification code will be sent to this email.</div>
+                <input className="input" type="email" placeholder="yourname@mobitel.lk" value={f.email} onChange={upd("email")} />
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Must be your @mobitel.lk company email. Used for verification.</div>
               </div>
               <div><label className="label">Password<span className="req">*</span></label><input className="input" type="password" placeholder="••••••••" value={f.password} onChange={upd("password")} /></div>
               <div><label className="label">Confirm Password<span className="req">*</span></label><input className="input" type="password" placeholder="••••••••" value={f.confirm} onChange={upd("confirm")} /></div>
@@ -2942,14 +2977,15 @@ export default function App() {
       }
     })();
 
-    // FIX: run inactive-employee cleanup at most once every 24h (throttled via localStorage)
-    // so it doesn't hit the DB on every single page load. Runs in the background —
-    // never blocks the boot screen.
+    // FIX: run cleanup checks at most once every 24h (throttled via localStorage)
     try {
       const CLEANUP_KEY = "cc_last_cleanup_check";
       const last = Number(localStorage.getItem(CLEANUP_KEY) || 0);
       if (Date.now() - last > 24 * 60 * 60 * 1000) {
-        DB.cleanupInactiveEmployees().then(() => {
+        Promise.all([
+          DB.cleanupInactiveEmployees(),  // deletes accounts inactive 30+ days
+          DB.cleanupOldData(),            // deletes submissions & roster months older than 40 days
+        ]).then(() => {
           localStorage.setItem(CLEANUP_KEY, String(Date.now()));
         });
       }
