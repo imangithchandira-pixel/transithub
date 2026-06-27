@@ -2558,7 +2558,7 @@ function AdminDashboard({ user, onLogout }) {
   useEffect(() => { if (tab === "apps" || tab === "routes") DB.getApps().then(setApps); }, [tab]);
   useEffect(() => { DB.getSetting("supplier").then(v => { if (v) { setSupplier(v); setSupplierDraft(v); } }); }, []);
   useEffect(() => { DB.getAdmins().then(setAdmins); }, []);
-  useEffect(() => { DB.getUsers().then(raw => setUsers(raw.map(userFromDb).filter(u => u.role !== "admin"))); }, []);
+  useEffect(() => { DB.getUsers().then(raw => setUsers(raw.map(userFromDb).filter(u => u.empId !== "ADMIN"))); }, []);
 
   const saveSupplier = async () => {
     await DB.setSetting("supplier", supplierDraft);
@@ -2758,15 +2758,20 @@ function AdminDashboard({ user, onLogout }) {
         )}
         {tab === "employees" && (
           <div className="stack">
-            <div><div className="page-title">Employees</div><div className="page-sub">{users.length} registered employee(s).</div></div>
+            <div><div className="page-title">Employees</div><div className="page-sub">{users.filter(u => u.role !== "admin").length} employee(s) · {users.filter(u => u.role === "admin").length} team leader(s)</div></div>
             {resetPwMsg && <div className={`alert alert-${resetPwMsg.t === "err" ? "err" : "ok"}`}>{resetPwMsg.m}</div>}
             <div className="card-0">
               <table className="tbl">
                 <thead><tr><th>Emp ID</th><th>Name</th><th>Contact</th><th>Email</th><th>Saved Addresses</th><th>Roster Months</th><th>Joined</th><th>Action</th></tr></thead>
                 <tbody>
-                  {users.map(u => (
-                    <tr key={u.id}>
-                      <td style={{ fontWeight: 700 }}>{u.empId}</td>
+                  {users.map(u => {
+                    const isTL = u.role === "admin";
+                    return (
+                    <tr key={u.id} style={isTL ? { background: "#EDE9FE" } : {}}>
+                      <td style={{ fontWeight: 700 }}>
+                        {u.empId}
+                        {isTL && <span className="badge badge-purple" style={{ marginLeft: 6, fontSize: 10 }}>TL</span>}
+                      </td>
                       <td>{u.name}</td>
                       <td style={{ fontSize: 12 }}>{u.phone || "—"}</td>
                       <td style={{ fontSize: 12 }}>{u.email || <span style={{ color: C.border }}>Not set</span>}</td>
@@ -2774,22 +2779,26 @@ function AdminDashboard({ user, onLogout }) {
                       <td>{Object.keys(u.rosterData || {}).map(mk => <span key={mk} className="badge badge-grey" style={{ marginRight: 4 }}>{mk}</span>)}</td>
                       <td style={{ fontSize: 12, color: C.muted }}>{u.createdAt}</td>
                       <td>
-                        {resetPwUserId === u.id ? (
-                          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                            <input className="input" type="password" placeholder="New password" style={{ padding: "4px 8px", fontSize: 12, width: 110 }}
-                              value={resetPwValue} onChange={e => setResetPwValue(e.target.value)}
-                              onKeyDown={e => e.key === "Enter" && resetEmployeePassword(u)} autoFocus />
-                            <button className="btn btn-sm btn-cyan" onClick={() => resetEmployeePassword(u)}><Ico n="check" s={11} /></button>
-                            <button className="btn btn-ghost btn-sm" onClick={() => { setResetPwUserId(null); setResetPwValue(""); }}>✕</button>
-                          </div>
-                        ) : (
-                          <button className="btn btn-ghost btn-sm" onClick={() => { setResetPwUserId(u.id); setResetPwValue(""); setResetPwMsg(null); }}>
-                            <Ico n="edit" s={11} /> Reset Password
-                          </button>
+                        {isSuperAdmin && !isTL && (
+                          resetPwUserId === u.id ? (
+                            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              <input className="input" type="password" placeholder="New password" style={{ padding: "4px 8px", fontSize: 12, width: 110 }}
+                                value={resetPwValue} onChange={e => setResetPwValue(e.target.value)}
+                                onKeyDown={e => e.key === "Enter" && resetEmployeePassword(u)} autoFocus />
+                              <button className="btn btn-sm btn-cyan" onClick={() => resetEmployeePassword(u)}><Ico n="check" s={11} /></button>
+                              <button className="btn btn-ghost btn-sm" onClick={() => { setResetPwUserId(null); setResetPwValue(""); }}>✕</button>
+                            </div>
+                          ) : (
+                            <button className="btn btn-ghost btn-sm" onClick={() => { setResetPwUserId(u.id); setResetPwValue(""); setResetPwMsg(null); }}>
+                              <Ico n="edit" s={11} /> Reset Password
+                            </button>
+                          )
                         )}
+                        {(!isSuperAdmin || isTL) && <span style={{ fontSize: 11, color: C.border }}>—</span>}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   {!users.length && <tr><td colSpan={8} style={{ textAlign: "center", color: C.muted, padding: 24 }}>No employees registered yet.</td></tr>}
                 </tbody>
               </table>
