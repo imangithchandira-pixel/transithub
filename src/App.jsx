@@ -1990,6 +1990,42 @@ function AdminRouteView({ apps, user }) {
   const [selShift, setSelShift] = useState("All");
   const [selRoute, setSelRoute] = useState("All");
 
+  // FIX: Add Transport Request form state
+  const [showAddForm,  setShowAddForm]  = useState(false);
+  const [addForm,      setAddForm]      = useState({ empId: "", shift: "", pickDrop: "", address: "", mapsLink: "", route: "", phone: "" });
+  const [addLoading,   setAddLoading]   = useState(false);
+  const [addMsg,       setAddMsg]       = useState(null);
+
+  const addTransportEntry = async () => {
+    if (!addForm.empId)    return setAddMsg({ t: "err", m: "Employee ID is required." });
+    if (!addForm.shift)    return setAddMsg({ t: "err", m: "Please select a shift." });
+    if (!addForm.pickDrop) return setAddMsg({ t: "err", m: "Please select Pick or Drop." });
+    if (!addForm.address)  return setAddMsg({ t: "err", m: "Address is required." });
+    if (!addForm.route)    return setAddMsg({ t: "err", m: "Please select a route." });
+    setAddLoading(true);
+    setAddMsg(null);
+    try {
+      const raw = await DB.getUserByEmpId(addForm.empId);
+      if (!raw) { setAddLoading(false); return setAddMsg({ t: "err", m: `No employee found with ID "${addForm.empId}".` }); }
+      const emp = userFromDb(raw);
+      const newApp = {
+        id: uid(), userId: emp.id, empId: emp.empId, empName: emp.name,
+        date: selDate, phone: addForm.phone || emp.phone || "", shift: addForm.shift,
+        pickDrop: addForm.pickDrop, address: addForm.address, mapsLink: addForm.mapsLink || "",
+        route: addForm.route, wantsDinner: false, dinnerMeal: "",
+        entryMode: "admin", submittedAt: new Date().toISOString(),
+      };
+      await DB.createApp(newApp);
+      setAddMsg({ t: "ok", m: `${addForm.pickDrop} request added for ${emp.name} on ${selDate}.` });
+      setAddForm({ empId: "", shift: "", pickDrop: "", address: "", mapsLink: "", route: "", phone: "" });
+      // FIX: reload apps to show new entry immediately
+      window.location.reload();
+    } catch(e) {
+      setAddMsg({ t: "err", m: "Failed: " + e.message });
+    }
+    setAddLoading(false);
+  };
+
   const dayApps = apps.filter(a => {
     if (a.date !== selDate) return false;
     if (selShift !== "All" && a.shift !== selShift) return false;
@@ -2077,6 +2113,81 @@ function AdminRouteView({ apps, user }) {
             <button className="btn btn-outline btn-sm" onClick={exportTransportXLSX}>
               <Ico n="download" s={13} />🚌 Transport Excel — {selDate}
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Add Transport Request card */}
+      <div className="card">
+        <div className="flex-b" style={{ marginBottom: showAddForm ? 16 : 0 }}>
+          <div>
+            <div className="sec-title" style={{ margin: 0 }}>➕ Add Transport Request</div>
+            {!showAddForm && <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Manually add a transport entry for any employee.</div>}
+          </div>
+          <button
+            className={`btn btn-sm ${showAddForm ? "btn-ghost" : "btn-cyan"}`}
+            onClick={() => { setShowAddForm(p => !p); setAddMsg(null); setAddForm({ empId: "", shift: "", pickDrop: "", address: "", mapsLink: "", route: "", phone: "" }); }}>
+            {showAddForm ? "✕ Cancel" : <><Ico n="plus" s={13} />Add Request</>}
+          </button>
+        </div>
+        {showAddForm && (
+          <div>
+            {addMsg && <div className={`alert alert-${addMsg.t === "err" ? "err" : "ok"}`}>{addMsg.m}</div>}
+            <div className="g3" style={{ marginBottom: 14 }}>
+              <div>
+                <label className="label">Employee ID<span className="req">*</span></label>
+                <input className="input" placeholder="e.g. EMP001" value={addForm.empId}
+                  onChange={e => setAddForm(p => ({ ...p, empId: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Shift<span className="req">*</span></label>
+                <select className="input" value={addForm.shift}
+                  onChange={e => setAddForm(p => ({ ...p, shift: e.target.value }))}>
+                  <option value="">— Select shift —</option>
+                  {SHIFT_LABELS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Pick / Drop<span className="req">*</span></label>
+                <select className="input" value={addForm.pickDrop}
+                  onChange={e => setAddForm(p => ({ ...p, pickDrop: e.target.value }))}>
+                  <option value="">— Select —</option>
+                  <option value="PICK">PICK</option>
+                  <option value="DROP">DROP</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Route<span className="req">*</span></label>
+                <select className="input" value={addForm.route}
+                  onChange={e => setAddForm(p => ({ ...p, route: e.target.value }))}>
+                  <option value="">— Select route —</option>
+                  {ROUTES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Contact No.</label>
+                <input className="input" placeholder="+94 77 000 0000" value={addForm.phone}
+                  onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Maps Link</label>
+                <input className="input" placeholder="https://maps.app.goo.gl/…" value={addForm.mapsLink}
+                  onChange={e => setAddForm(p => ({ ...p, mapsLink: e.target.value }))} />
+              </div>
+              <div className="col2" style={{ gridColumn: "1/-1" }}>
+                <label className="label">Address<span className="req">*</span></label>
+                <input className="input" placeholder="Full pickup/drop address" value={addForm.address}
+                  onChange={e => setAddForm(p => ({ ...p, address: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button className="btn btn-cyan" onClick={addTransportEntry} disabled={addLoading}>
+                <Ico n="check" s={14} />{addLoading ? "Adding…" : "Confirm & Add"}
+              </button>
+              <span style={{ fontSize: 12, color: C.muted }}>
+                Date: <b style={{ color: C.text }}>{selDate}</b>
+              </span>
+            </div>
           </div>
         )}
       </div>
@@ -2558,7 +2669,11 @@ function AdminDashboard({ user, onLogout }) {
   useEffect(() => { if (tab === "apps" || tab === "routes") DB.getApps().then(setApps); }, [tab]);
   useEffect(() => { DB.getSetting("supplier").then(v => { if (v) { setSupplier(v); setSupplierDraft(v); } }); }, []);
   useEffect(() => { DB.getAdmins().then(setAdmins); }, []);
-  useEffect(() => { DB.getUsers().then(raw => setUsers(raw.map(userFromDb).filter(u => u.empId !== "ADMIN"))); }, []);
+  useEffect(() => { DB.getUsers().then(raw => setUsers(raw.map(userFromDb).filter(u => u.empId !== "ADMIN").sort((a, b) => {
+    if (a.role === "admin" && b.role !== "admin") return -1;
+    if (a.role !== "admin" && b.role === "admin") return 1;
+    return a.name.localeCompare(b.name);
+  }))); }, []);
 
   const saveSupplier = async () => {
     await DB.setSetting("supplier", supplierDraft);
