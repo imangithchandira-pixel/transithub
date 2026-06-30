@@ -57,6 +57,78 @@ const LockoutStore  = {
   },
 };
 
+// ─── Submission cutoff checker ────────────────────────────────────────────────
+// Rules:
+//   Morning shifts (6AM-3PM, 8AM-5PM)  → must apply by 8:00 PM the DAY BEFORE
+//   Evening shifts (3PM-12AM, 11AM-8PM) → must apply by 6:00 PM same day
+//   Night shift   (7PM-6AM)             → must apply by 9:00 PM same day
+//   Admins (role === "admin")           → always bypass cutoff
+const MORNING_SHIFTS = ["6AM - 3PM", "8AM - 5PM"];
+const EVENING_SHIFTS = ["3PM - 12AM", "11AM - 8PM"];
+const NIGHT_SHIFTS   = ["7PM - 6AM"];
+
+const checkSubmissionCutoff = (date, shift) => {
+  if (!date || !shift) return { blocked: false };
+  const today = todayStr();
+  const now   = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+
+  // Past dates always blocked for new submissions
+  if (date < today) return {
+    blocked: true,
+    reason: "Applications for past dates are not allowed.",
+    deadline: null,
+  };
+
+  if (date === today) {
+    if (MORNING_SHIFTS.includes(shift)) return {
+      blocked: true,
+      reason: "Morning shift applications must be submitted by 8:00 PM the previous day. The deadline has passed.",
+      deadline: "8:00 PM previous day",
+    };
+    if (EVENING_SHIFTS.includes(shift) && nowMins >= 18 * 60) return {
+      blocked: true,
+      reason: "Applications for this shift closed at 6:00 PM today.",
+      deadline: "6:00 PM today",
+    };
+    if (NIGHT_SHIFTS.includes(shift) && nowMins >= 21 * 60) return {
+      blocked: true,
+      reason: "Applications for the 7PM-6AM shift closed at 9:00 PM today.",
+      deadline: "9:00 PM today",
+    };
+  }
+
+  if (date > today) {
+    // For future dates, morning shifts: deadline is 8PM the day before (i.e. today if tomorrow)
+    if (MORNING_SHIFTS.includes(shift)) {
+      const shiftDay  = new Date(date);
+      const prevDay   = new Date(shiftDay);
+      prevDay.setDate(prevDay.getDate() - 1);
+      const prevDayStr = prevDay.toISOString().split("T")[0];
+      if (prevDayStr < today) return {
+        blocked: true,
+        reason: "The application deadline for this morning shift has already passed (8:00 PM the previous day).",
+        deadline: "8:00 PM previous day",
+      };
+      if (prevDayStr === today && nowMins >= 20 * 60) return {
+        blocked: true,
+        reason: "Applications for tomorrow's morning shift closed at 8:00 PM today.",
+        deadline: "8:00 PM today",
+      };
+    }
+  }
+
+  // Not blocked — calculate time remaining for info display
+  let deadline = null;
+  if (date === today) {
+    if (EVENING_SHIFTS.includes(shift)) deadline = "6:00 PM today";
+    if (NIGHT_SHIFTS.includes(shift))   deadline = "9:00 PM today";
+  }
+  if (date > today && MORNING_SHIFTS.includes(shift)) deadline = "8:00 PM the day before";
+
+  return { blocked: false, deadline };
+};
+
 const supa = async (method, table, { filter = "", body = null, single = false } = {}) => {
   const url = `${SUPA_URL}/rest/v1/${table}${filter ? "?" + filter : ""}`;
   const h = { ...HEADERS };
@@ -220,6 +292,14 @@ const DB = {
   },
   setSetting: async (key, val) => {
     await supa("POST", "cc_settings", { body: { key, value: val }, single: true });
+  },
+  // FIX: cutoff enforcement toggle — stored as "true"/"false" in cc_settings
+  getCutoffEnabled: async () => {
+    const d = await supa("GET", "cc_settings", { filter: "select=value&key=eq.cutoff_enabled", single: true });
+    return d?.value !== "false"; // defaults to enabled if not set
+  },
+  setCutoffEnabled: async (enabled) => {
+    await supa("POST", "cc_settings", { body: { key: "cutoff_enabled", value: String(enabled) }, single: true });
   },
   seedAdmin: async () => {
     try {
@@ -1274,6 +1354,11 @@ function TransportForm({ user }) {
     DB.getUserById(user.id).then(raw => { if (raw) setLu(userFromDb(raw)); });
   }, [user.id]);
 
+  // FIX: cutoff enforcement state
+  const [cutoffEnabled, setCutoffEnabled] = useState(true);
+  useEffect(() => { DB.getCutoffEnabled().then(setCutoffEnabled); }, []);
+  const isAdmin = user.role === "admin"; // admins bypass cutoff
+
   const [mode,       setMode]       = useState("auto");
   const [selYear,    setSelYear]    = useState(nowYear());
   const [selMonth,   setSelMonth]   = useState(nowMonth());
@@ -1288,6 +1373,11 @@ function TransportForm({ user }) {
   const [dayUsage,  setDayUsage]  = useState({ hasPick: false, hasDrop: false, hasDinner: false });
   // FIX: track submitted form data for the success screen
   const [submittedForm, setSubmittedForm] = useState(null);
+
+  // FIX: compute cutoff status whenever date or shift changes
+  const cutoffStatus = (cutoffEnabled && !isAdmin)
+    ? checkSubmissionCutoff(form.date, form.shift)
+    : { blocked: false, deadline: null };
 
   const rosterData  = lu.rosterData || {};
   const monthKey    = `${selYear}-${String(selMonth).padStart(2, "0")}`;
@@ -1368,6 +1458,11 @@ function TransportForm({ user }) {
     if (!form.date)  return setMsg({ t: "err", m: "Date is required." });
     if (!form.phone) return setMsg({ t: "err", m: "Contact number is required." });
     if (!form.shift) return setMsg({ t: "err", m: "Shift is required." });
+    // FIX: enforce submission cutoff (admins bypass this check)
+    if (cutoffEnabled && !isAdmin) {
+      const { blocked, reason } = checkSubmissionCutoff(form.date, form.shift);
+      if (blocked) return setMsg({ t: "err", m: `⏰ Submission closed — ${reason}` });
+    }
     const isDinnerOnly = mode === "dinner";
     if (isDinnerOnly) {
       if (getDinnerMode(form.shift) === "none")
@@ -1670,7 +1765,28 @@ function TransportForm({ user }) {
         </div>
       )}
 
-      <button className="btn btn-red" onClick={submit}>Submit Request</button>
+      {/* FIX: cutoff deadline info / blocked banner */}
+      {cutoffEnabled && !isAdmin && form.date && form.shift && (() => {
+        const { blocked, reason, deadline } = checkSubmissionCutoff(form.date, form.shift);
+        if (blocked) return (
+          <div style={{ background: "#FEE2E0", border: `1.5px solid ${C.red}`, borderRadius: 10, padding: "14px 16px" }}>
+            <div style={{ fontWeight: 800, color: C.red, fontSize: 14, marginBottom: 4 }}>⏰ Submissions Closed</div>
+            <div style={{ fontSize: 13, color: C.red }}>{reason}</div>
+          </div>
+        );
+        if (deadline) return (
+          <div style={{ background: C.orangeLight, border: `1.5px solid ${C.orange}`, borderRadius: 10, padding: "12px 16px" }}>
+            <div style={{ fontWeight: 700, color: C.orange, fontSize: 13 }}>⏰ Deadline: {deadline}</div>
+            <div style={{ fontSize: 12, color: C.orange, marginTop: 2 }}>Submit before the deadline or your request won't be accepted.</div>
+          </div>
+        );
+        return null;
+      })()}
+
+      <button className="btn btn-red" onClick={submit}
+        disabled={cutoffEnabled && !isAdmin && form.date && form.shift && checkSubmissionCutoff(form.date, form.shift).blocked}>
+        Submit Request
+      </button>
     </div>
   );
 
@@ -2657,6 +2773,9 @@ function AdminDashboard({ user, onLogout }) {
   const [supplier,     setSupplier]    = useState("PICKME Food");
   const [supplierEdit, setSupplierEdit]= useState(false);
   const [supplierDraft,setSupplierDraft]=useState("PICKME Food");
+  // FIX: cutoff toggle state for Super Admin
+  const [cutoffOn,     setCutoffOn]    = useState(true);
+  const [cutoffSaving, setCutoffSaving]= useState(false);
   const [users,        setUsers]       = useState([]);
   // FIX: admin "Reset Password" fallback state
   const [resetPwUserId, setResetPwUserId] = useState(null);
@@ -2668,6 +2787,7 @@ function AdminDashboard({ user, onLogout }) {
   useEffect(() => { DB.getApps().then(data => { setApps(data); setLoadingApps(false); }); }, []);
   useEffect(() => { if (tab === "apps" || tab === "routes") DB.getApps().then(setApps); }, [tab]);
   useEffect(() => { DB.getSetting("supplier").then(v => { if (v) { setSupplier(v); setSupplierDraft(v); } }); }, []);
+  useEffect(() => { DB.getCutoffEnabled().then(setCutoffOn); }, []);
   useEffect(() => { DB.getAdmins().then(setAdmins); }, []);
   useEffect(() => { DB.getUsers().then(raw => setUsers(raw.map(userFromDb).filter(u => u.empId !== "ADMIN").sort((a, b) => {
     if (a.role === "admin" && b.role !== "admin") return -1;
@@ -2998,6 +3118,62 @@ function AdminDashboard({ user, onLogout }) {
                 </div>
               )}
             </div>
+
+            {/* FIX: Submission cutoff toggle — Super Admin only */}
+            {isSuperAdmin && (
+              <div className="card">
+                <div className="sec-title">⏰ Submission Cutoff</div>
+                <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
+                  When enabled, employees must submit transport requests before the following deadlines:
+                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {[
+                      ["6AM-3PM / 8AM-5PM", "8:00 PM the day before"],
+                      ["3PM-12AM / 11AM-8PM", "6:00 PM same day"],
+                      ["7PM-6AM", "9:00 PM same day"],
+                    ].map(([shift, deadline]) => (
+                      <div key={shift} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "6px 10px", background: C.ice, borderRadius: 8 }}>
+                        <span style={{ fontWeight: 700, color: C.text }}>{shift}</span>
+                        <span style={{ color: C.muted }}>{deadline}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: C.cyan }}>Admins and Team Leaders always bypass the cutoff.</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div
+                    onClick={async () => {
+                      if (cutoffSaving) return;
+                      setCutoffSaving(true);
+                      const next = !cutoffOn;
+                      await DB.setCutoffEnabled(next);
+                      setCutoffOn(next);
+                      setCutoffSaving(false);
+                    }}
+                    style={{
+                      width: 52, height: 28, borderRadius: 14, cursor: "pointer",
+                      background: cutoffOn ? C.green : C.border,
+                      position: "relative", transition: "background .2s",
+                      flexShrink: 0,
+                    }}>
+                    <div style={{
+                      width: 22, height: 22, borderRadius: "50%", background: "#fff",
+                      position: "absolute", top: 3,
+                      left: cutoffOn ? 27 : 3,
+                      transition: "left .2s",
+                      boxShadow: "0 1px 4px rgba(0,0,0,.2)",
+                    }} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: cutoffOn ? C.green : C.muted }}>
+                      {cutoffSaving ? "Saving…" : cutoffOn ? "Cutoff Enabled" : "Cutoff Disabled"}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.muted }}>
+                      {cutoffOn ? "Employees cannot submit after the deadline." : "Employees can submit at any time."}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="card">
               <div className="sec-title">🍽 Dinner Supplier</div>
