@@ -895,9 +895,38 @@ const extractEmpId = (header) => {
   return /\d/.test(last) ? last : null;
 };
 
+// FIX: month name → number map for auto-detection from weekly roster row 1
+const MONTH_NAME_MAP = {
+  january:1, february:2, march:3, april:4, may:5, june:6,
+  july:7, august:8, september:9, october:10, november:11, december:12,
+  jan:1, feb:2, mar:3, apr:4, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12,
+};
+
+const detectMonthFromRows = (rows, fallbackMonth, fallbackYear) => {
+  // Look in the first 3 rows for a month name
+  for (let i = 0; i < Math.min(3, rows.length); i++) {
+    for (const cell of rows[i]) {
+      const s = String(cell || "").trim().toLowerCase();
+      // Could be "JULY", "July 2026", "July-2026", "2026 JULY" etc.
+      for (const [name, num] of Object.entries(MONTH_NAME_MAP)) {
+        if (s.includes(name)) {
+          // Try to extract year too
+          const yearMatch = s.match(/20\d{2}/);
+          const detectedYear = yearMatch ? parseInt(yearMatch[0]) : fallbackYear;
+          return { month: num, year: detectedYear, detected: true };
+        }
+      }
+    }
+  }
+  return { month: fallbackMonth, year: fallbackYear, detected: false };
+};
+
 const parseRosterSheet = (ws, year, month) => {
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-  if (rows.length < 2) return { empCols: [], result: {} };
+  if (rows.length < 2) return { empCols: [], result: {}, detectedMonth: null };
+
+  // FIX: auto-detect month/year from row 1 for weekly rosters
+  const { month: usedMonth, year: usedYear, detected } = detectMonthFromRows(rows, month, year);
 
   // Find the header row containing both "Day" and "Date" cells
   let headerIdx = -1, dayCol = -1, dateCol = -1;
@@ -912,7 +941,7 @@ const parseRosterSheet = (ws, year, month) => {
     for (let i = 0; i < Math.min(5, rows.length); i++) {
       if (rows[i].filter(c => String(c).trim()).length >= 3) { headerIdx = i; break; }
     }
-    if (headerIdx === -1) return { empCols: [], result: {} };
+    if (headerIdx === -1) return { empCols: [], result: {}, detectedMonth: null };
     const headers = rows[headerIdx].map(h => String(h).trim());
     dayCol  = headers.findIndex((h, i) => i === 0 || h.toLowerCase().includes("day"));
     dateCol = headers.findIndex((h, i) => i === 1 || h.toLowerCase().includes("date"));
@@ -932,7 +961,7 @@ const parseRosterSheet = (ws, year, month) => {
   const empCols = [];
   for (let c = startCol; c < namesRow.length; c++) {
     const empId = extractEmpId(namesRow[c]);
-    if (!empId) continue; // skips "General Line", "Overnight", blank columns
+    if (!empId) continue;
     empCols.push({ col: c, empId, header: namesRow[c] });
   }
 
@@ -944,25 +973,26 @@ const parseRosterSheet = (ws, year, month) => {
     const rawDate = row[dateCol];
     const dayNum = parseOrdinal(String(rawDate).replace(/st|nd|rd|th/gi, ""));
     if (!dayNum || dayNum < 1 || dayNum > 31) continue;
-    const dateStr = buildDate(year, month, dayNum);
+    const dateStr = buildDate(usedYear, usedMonth, dayNum);
     empCols.forEach(({ col, empId }) => {
       const rawShift = String(row[col] || "").trim();
       if (!rawShift) return;
       const shiftInfo = parseShiftCode(rawShift);
-      if (!shiftInfo) return; // skip unrecognised cells (e.g. names in Overnight column)
+      if (!shiftInfo) return;
       result[empId][dateStr] = { shiftRaw: rawShift, shiftInfo };
     });
   }
-  return { empCols, result };
+  return { empCols, result, detectedMonth: detected ? { month: usedMonth, year: usedYear } : null };
 };
 
 const parseRosterExcel = (wb, year, month) => {
-  // FIX: parse EVERY sheet (weekly rosters split employees across Girls/Boys sheets)
   const allEmpCols = [];
   const merged = {};
+  let detectedMonth = null;
   for (const sheetName of wb.SheetNames) {
     const ws = wb.Sheets[sheetName];
-    const { empCols, result } = parseRosterSheet(ws, year, month);
+    const { empCols, result, detectedMonth: dm } = parseRosterSheet(ws, year, month);
+    if (dm && !detectedMonth) detectedMonth = dm; // use first detected month
     empCols.forEach(e => allEmpCols.push(e));
     for (const [empId, days] of Object.entries(result)) {
       if (!merged[empId]) merged[empId] = {};
@@ -970,7 +1000,7 @@ const parseRosterExcel = (wb, year, month) => {
     }
   }
   if (allEmpCols.length === 0) throw new Error("No employee columns found. Check the file format.");
-  return { empCols: allEmpCols, result: merged };
+  return { empCols: allEmpCols, result: merged, detectedMonth };
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1041,15 +1071,23 @@ function RosterPage({ user, onUserUpdate }) {
     reader.onload = (e) => {
       try {
         const wb = XLSX.read(e.target.result, { type: "binary", cellDates: false });
-        const { result } = parseRosterExcel(wb, selYear, selMonth);
+        const { result, detectedMonth } = parseRosterExcel(wb, selYear, selMonth);
+        // FIX: if the file has a month name in row 1 (weekly roster), auto-switch the selector
+        if (detectedMonth) {
+          setSelMonth(detectedMonth.month);
+          setSelYear(detectedMonth.year);
+        }
         const myData = result[user.empId];
         if (!myData || Object.keys(myData).length === 0)
           return setMsg({ t: "err", m: `No column found matching your Employee ID (${user.empId}). Check the file format.` });
         const count    = Object.keys(myData).length;
         const workDays = Object.values(myData).filter(v => !v.shiftInfo?.off).length;
-        setPendingData(myData);
+        const usedMonth = detectedMonth ? detectedMonth.month : selMonth;
+        const usedYear  = detectedMonth ? detectedMonth.year  : selYear;
+        setPendingData({ data: myData, month: usedMonth, year: usedYear });
         setPreview({ count, workDays });
-        setMsg({ t: "ok", m: `Found ${count} days (${workDays} working). Click Import to confirm.` });
+        const autoMsg = detectedMonth ? ` · Auto-detected: ${MONTHS[detectedMonth.month - 1]} ${detectedMonth.year}` : "";
+        setMsg({ t: "ok", m: `Found ${count} day(s) (${workDays} working)${autoMsg}. Click Import to confirm.` });
       } catch (err) {
         setMsg({ t: "err", m: "Could not read file: " + err.message });
       }
@@ -1058,15 +1096,17 @@ function RosterPage({ user, onUserUpdate }) {
   };
 
   const importData = async () => {
+    const { data: myData, month: useMonth, year: useYear } = pendingData;
+    const useKey = `${useYear}-${String(useMonth).padStart(2, "0")}`;
     // FIX: merge day-by-day into the existing month so weekly uploads
     // add/update only those days without wiping the rest of the month
-    const existingMonth = rosterData[monthKey] || {};
-    const next    = { ...rosterData, [monthKey]: { ...existingMonth, ...pendingData } };
+    const existingMonth = rosterData[useKey] || {};
+    const next    = { ...rosterData, [useKey]: { ...existingMonth, ...myData } };
     const updated = { ...user, rosterData: next };
     await DB.updateUser(updated);
     onUserUpdate(updated);
     setPendingData(null); setPreview(null);
-    setMsg({ t: "ok", m: `${Object.keys(pendingData).length} day(s) imported/updated for ${MONTHS[selMonth - 1]} ${selYear}.` });
+    setMsg({ t: "ok", m: `${Object.keys(myData).length} day(s) imported/updated for ${MONTHS[useMonth - 1]} ${useYear}.` });
   };
 
   const clearMonth = async () => {
@@ -2100,9 +2140,13 @@ function AdminRosterImport() {
     reader.onload = async (e) => {
       try {
         const wb       = XLSX.read(e.target.result, { type: "binary", cellDates: false });
-        const { empCols, result } = parseRosterExcel(wb, selYear, selMonth);
+        const { empCols, result, detectedMonth } = parseRosterExcel(wb, selYear, selMonth);
+        // FIX: auto-switch month/year selectors if detected from file (weekly roster)
+        const useMonth = detectedMonth ? detectedMonth.month : selMonth;
+        const useYear  = detectedMonth ? detectedMonth.year  : selYear;
+        if (detectedMonth) { setSelMonth(useMonth); setSelYear(useYear); }
         const rawUsers = await DB.getUsers();
-        const monthKey = `${selYear}-${String(selMonth).padStart(2, "0")}`;
+        const monthKey = `${useYear}-${String(useMonth).padStart(2, "0")}`;
         const matched = [], unmatched = [];
         for (const { empId, header } of empCols) {
           if (!empId) continue;
@@ -2122,7 +2166,8 @@ function AdminRosterImport() {
           await DB.updateUser(updated);
         }));
         setResults({ matched, unmatched, monthKey });
-        setMsg({ t: "ok", m: `Imported roster for ${matched.length} employee(s) for ${MONTHS[selMonth - 1]} ${selYear}.` });
+        const autoMsg = detectedMonth ? ` · Auto-detected: ${MONTHS[useMonth - 1]} ${useYear}` : "";
+        setMsg({ t: "ok", m: `Imported roster for ${matched.length} employee(s) for ${MONTHS[useMonth - 1]} ${useYear}.${autoMsg}` });
       } catch (err) {
         setMsg({ t: "err", m: "Error: " + err.message });
       }
