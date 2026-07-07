@@ -63,7 +63,7 @@ const LockoutStore  = {
 //   Evening shifts (3PM-12AM, 11AM-8PM) → must apply by X PM same day
 //   Night shift   (7PM-6AM)             → must apply by X PM same day
 //   Admins (role === "admin")           → always bypass cutoff
-const MORNING_SHIFTS = ["6AM - 3PM", "8AM - 5PM"];
+const MORNING_SHIFTS = ["6AM - 3PM", "7AM - 4PM", "8AM - 5PM", "9AM - 6PM"];
 const EVENING_SHIFTS = ["3PM - 12AM", "11AM - 8PM"];
 const NIGHT_SHIFTS   = ["7PM - 6AM"];
 
@@ -401,14 +401,18 @@ const C = {
 const SHIFT_MAP = {
   "06-15": { label: "6AM - 3PM",   color: C.orange, bg: C.orangeLight, ms: "6AM"  },
   "6-15":  { label: "6AM - 3PM",   color: C.orange, bg: C.orangeLight, ms: "6AM"  },
+  "07-16": { label: "7AM - 4PM",   color: C.pink,   bg: C.pinkLight,   ms: "7AM"  },
+  "7-16":  { label: "7AM - 4PM",   color: C.pink,   bg: C.pinkLight,   ms: "7AM"  },
   "08-17": { label: "8AM - 5PM",   color: C.cyan,   bg: C.cyanLight,   ms: "8AM"  },
   "8-17":  { label: "8AM - 5PM",   color: C.cyan,   bg: C.cyanLight,   ms: "8AM"  },
+  "09-18": { label: "9AM - 6PM",   color: C.deepTeal, bg: C.cyanLight, ms: "9AM"  },
+  "9-18":  { label: "9AM - 6PM",   color: C.deepTeal, bg: C.cyanLight, ms: "9AM"  },
   "11-20": { label: "11AM - 8PM",  color: C.green,  bg: C.greenLight,  ms: "11AM" },
   "15-00": { label: "3PM - 12AM",  color: C.midTeal,bg: C.cyanLight,   ms: "3PM"  },
   "19-06": { label: "7PM - 6AM",   color: C.purple, bg: C.purpleLight, ms: "7PM"  },
   "19-6":  { label: "7PM - 6AM",   color: C.purple, bg: C.purpleLight, ms: "7PM"  },
 };
-const SHIFT_LABELS  = ["6AM - 3PM","8AM - 5PM","3PM - 12AM","7PM - 6AM","11AM - 8PM","Other"];
+const SHIFT_LABELS  = ["6AM - 3PM","7AM - 4PM","8AM - 5PM","9AM - 6PM","11AM - 8PM","3PM - 12AM","7PM - 6AM","Other"];
 const ROUTES        = ["Kandy Road","Negombo Road","Galle Road","High Level Road","Athurugiriya Road","Piliyandala Route"];
 const MONTHS        = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DINNER_MEALS  = ["Chicken","Vegetable","Fish","Egg"];
@@ -426,6 +430,10 @@ const parseShiftCode = (raw) => {
   if (lower === "off" || lower === "roff" || lower.startsWith("off") || lower.endsWith("off")) {
     const isRest = lower.includes("r");
     return { label: isRest ? "Rest Day (OFF)" : "Day Off", off: true, color: C.muted, bg: C.grey1 };
+  }
+  // FIX: weekly rosters use "Leave" for leave days — treated same as off (no transport)
+  if (lower === "leave" || lower === "annualleave" || lower === "al" || lower === "sick" || lower === "sickleave") {
+    return { label: "Leave", off: true, color: C.muted, bg: C.grey1 };
   }
   const key = s.replace(/\s/g, "");
   if (SHIFT_MAP[key]) return { ...SHIFT_MAP[key], off: false };
@@ -867,34 +875,69 @@ function AuthScreen({ onLogin }) {
 
 // ════════════════════════════════════════════════════════════════════════════
 // ROSTER PARSER
+// Supports BOTH formats:
+//   MONTHLY: single sheet — header row "Day | Date | Name (ID) | Name (ID) …"
+//   WEEKLY:  multiple sheets (e.g. Girls/Boys) —
+//            row above header holds names "Name (ID)", header row is
+//            "Day | Date | Route | Route …", then 7 day-rows.
+// Non-employee columns (e.g. "General Line", "Overnight") are skipped
+// because they have no (ID) bracket and no trailing numeric ID.
 // ════════════════════════════════════════════════════════════════════════════
-const parseRosterExcel = (wb, year, month) => {
-  const ws = wb.Sheets[wb.SheetNames[0]];
+const extractEmpId = (header) => {
+  if (!header) return null;
+  const h = String(header).trim();
+  if (!h) return null;
+  const bracketMatch = h.match(/\(([^)]+?)\s*\)/);
+  if (bracketMatch) return bracketMatch[1].trim();
+  // Fallback: last word — only if it contains digits (avoids "General Line", "Overnight")
+  const parts = h.split(/\s+/);
+  const last = parts[parts.length - 1];
+  return /\d/.test(last) ? last : null;
+};
+
+const parseRosterSheet = (ws, year, month) => {
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-  if (rows.length < 2) throw new Error("File appears empty.");
-  let headerIdx = 0;
-  for (let i = 0; i < Math.min(5, rows.length); i++) {
-    if (rows[i].filter(c => String(c).trim()).length >= 3) { headerIdx = i; break; }
+  if (rows.length < 2) return { empCols: [], result: {} };
+
+  // Find the header row containing both "Day" and "Date" cells
+  let headerIdx = -1, dayCol = -1, dateCol = -1;
+  for (let i = 0; i < Math.min(6, rows.length); i++) {
+    const cells = rows[i].map(c => String(c).trim().toLowerCase());
+    const d1 = cells.findIndex(c => c === "day");
+    const d2 = cells.findIndex(c => c === "date");
+    if (d1 !== -1 && d2 !== -1) { headerIdx = i; dayCol = d1; dateCol = d2; break; }
   }
-  const headers = rows[headerIdx].map(h => String(h).trim());
-  const dayCol  = headers.findIndex((h, i) => i === 0 || h.toLowerCase().includes("day"));
-  const dateCol = headers.findIndex((h, i) => i === 1 || h.toLowerCase().includes("date"));
-  const empCols = [];
-  for (let c = Math.max(dayCol, dateCol) + 1; c < headers.length; c++) {
-    const h = headers[c];
-    if (!h) continue;
-    let empId = null;
-    const bracketMatch = h.match(/\(([^)]+?)\s*\)/);
-    if (bracketMatch) {
-      empId = bracketMatch[1].trim();
-    } else {
-      const parts = h.trim().split(/\s+/);
-      empId = parts[parts.length - 1];
+  // Fallback to old heuristic (monthly files where "Day"/"Date" match loosely)
+  if (headerIdx === -1) {
+    for (let i = 0; i < Math.min(5, rows.length); i++) {
+      if (rows[i].filter(c => String(c).trim()).length >= 3) { headerIdx = i; break; }
     }
-    empCols.push({ col: c, empId, header: h });
+    if (headerIdx === -1) return { empCols: [], result: {} };
+    const headers = rows[headerIdx].map(h => String(h).trim());
+    dayCol  = headers.findIndex((h, i) => i === 0 || h.toLowerCase().includes("day"));
+    dateCol = headers.findIndex((h, i) => i === 1 || h.toLowerCase().includes("date"));
   }
+
+  const headers = rows[headerIdx].map(h => String(h).trim());
+
+  // Detect format: does the header row itself contain employee IDs (monthly)?
+  // If not, the names live in the row ABOVE the header (weekly).
+  const startCol = Math.max(dayCol, dateCol) + 1;
+  let namesRow = headers;
+  const headerHasIds = headers.slice(startCol).some(h => extractEmpId(h));
+  if (!headerHasIds && headerIdx > 0) {
+    namesRow = rows[headerIdx - 1].map(h => String(h).trim());
+  }
+
+  const empCols = [];
+  for (let c = startCol; c < namesRow.length; c++) {
+    const empId = extractEmpId(namesRow[c]);
+    if (!empId) continue; // skips "General Line", "Overnight", blank columns
+    empCols.push({ col: c, empId, header: namesRow[c] });
+  }
+
   const result = {};
-  empCols.forEach(e => { if (e.empId) result[e.empId] = {}; });
+  empCols.forEach(e => { result[e.empId] = {}; });
   for (let r = headerIdx + 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row || row.every(c => !c)) continue;
@@ -903,15 +946,31 @@ const parseRosterExcel = (wb, year, month) => {
     if (!dayNum || dayNum < 1 || dayNum > 31) continue;
     const dateStr = buildDate(year, month, dayNum);
     empCols.forEach(({ col, empId }) => {
-      if (!empId) return;
       const rawShift = String(row[col] || "").trim();
       if (!rawShift) return;
       const shiftInfo = parseShiftCode(rawShift);
-      if (!result[empId]) result[empId] = {};
+      if (!shiftInfo) return; // skip unrecognised cells (e.g. names in Overnight column)
       result[empId][dateStr] = { shiftRaw: rawShift, shiftInfo };
     });
   }
   return { empCols, result };
+};
+
+const parseRosterExcel = (wb, year, month) => {
+  // FIX: parse EVERY sheet (weekly rosters split employees across Girls/Boys sheets)
+  const allEmpCols = [];
+  const merged = {};
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    const { empCols, result } = parseRosterSheet(ws, year, month);
+    empCols.forEach(e => allEmpCols.push(e));
+    for (const [empId, days] of Object.entries(result)) {
+      if (!merged[empId]) merged[empId] = {};
+      Object.assign(merged[empId], days);
+    }
+  }
+  if (allEmpCols.length === 0) throw new Error("No employee columns found. Check the file format.");
+  return { empCols: allEmpCols, result: merged };
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -999,12 +1058,15 @@ function RosterPage({ user, onUserUpdate }) {
   };
 
   const importData = async () => {
-    const next    = { ...rosterData, [monthKey]: pendingData };
+    // FIX: merge day-by-day into the existing month so weekly uploads
+    // add/update only those days without wiping the rest of the month
+    const existingMonth = rosterData[monthKey] || {};
+    const next    = { ...rosterData, [monthKey]: { ...existingMonth, ...pendingData } };
     const updated = { ...user, rosterData: next };
     await DB.updateUser(updated);
     onUserUpdate(updated);
     setPendingData(null); setPreview(null);
-    setMsg({ t: "ok", m: `${Object.keys(pendingData).length} days imported for ${MONTHS[selMonth - 1]} ${selYear}.` });
+    setMsg({ t: "ok", m: `${Object.keys(pendingData).length} day(s) imported/updated for ${MONTHS[selMonth - 1]} ${selYear}.` });
   };
 
   const clearMonth = async () => {
@@ -2048,12 +2110,14 @@ function AdminRosterImport() {
           if (raw && result[empId]) matched.push({ user: raw, data: result[empId], name: header, empId });
           else unmatched.push({ empId, name: header });
         }
-        // FIX: merge roster_data properly so existing months for other employees aren't lost
+        // FIX: merge day-by-day within the month so weekly uploads only
+        // add/update those days without wiping the rest of the month
         await Promise.all(matched.map(async m => {
           const existingRosterData = m.user.roster_data || {};
+          const existingMonth = existingRosterData[monthKey] || {};
           const updated = userFromDb({
             ...m.user,
-            roster_data: { ...existingRosterData, [monthKey]: m.data }
+            roster_data: { ...existingRosterData, [monthKey]: { ...existingMonth, ...m.data } }
           });
           await DB.updateUser(updated);
         }));
