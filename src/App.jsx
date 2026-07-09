@@ -9,11 +9,9 @@ const EMAILJS_TEMPLATE_ID = "template_a32sv1q";
 const EMAILJS_PUBLIC_KEY  = "qKocC8xi1FyxVNJMl";
 
 // ─── Supabase REST client ─────────────────────────────────────────────────────
-// FIX: credentials now read from Vercel environment variables first,
-// falling back to the hardcoded values so the app still works if env vars
-// haven't been set up yet.
-const SUPA_URL  = import.meta.env.VITE_SUPA_URL  || "https://atdnqqwezsmvnpzfzkep.supabase.co";
-const SUPA_ANON = import.meta.env.VITE_SUPA_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0ZG5xcXdlenNtdm5wemZ6a2VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MjM1NjksImV4cCI6MjA5NzE5OTU2OX0.zGAHiI11hH8_9-JXoMOKVkI1xaRBZf73O469CJlKtTk";
+// Credentials loaded from Vercel environment variables — never hardcoded in source.
+const SUPA_URL  = import.meta.env.VITE_SUPA_URL;
+const SUPA_ANON = import.meta.env.VITE_SUPA_ANON;
 const HEADERS = {
   "Content-Type": "application/json",
   "apikey": SUPA_ANON,
