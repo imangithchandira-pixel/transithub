@@ -327,7 +327,14 @@ const DB = {
   setCutoffTime: async (type, time) => {
     await supa("POST", "cc_settings", { body: { key: `cutoff_${type}`, value: time }, single: true });
   },
-  // FIX: whether TLs can see/manage the cutoff settings card
+  // FIX: whether TLs can see the Admin Whitelist card
+  getWhitelistVisible: async () => {
+    const d = await supa("GET", "cc_settings", { filter: "select=value&key=eq.whitelist_tl_visible", single: true });
+    return d?.value === "true";
+  },
+  setWhitelistVisible: async (enabled) => {
+    await supa("POST", "cc_settings", { body: { key: "whitelist_tl_visible", value: String(enabled) }, single: true });
+  },
   getCutoffTLAccess: async () => {
     const d = await supa("GET", "cc_settings", { filter: "select=value&key=eq.cutoff_tl_access", single: true });
     return d?.value === "true"; // defaults to false (hidden from TLs)
@@ -1216,6 +1223,42 @@ function RosterPage({ user, onUserUpdate }) {
 // ════════════════════════════════════════════════════════════════════════════
 // PROFILE PAGE
 // ════════════════════════════════════════════════════════════════════════════
+// FIX: inline email setter for accounts that have no email yet (TLs created by admin)
+function EmailEditField({ user, onUpdate }) {
+  const [val,     setVal]     = useState("");
+  const [saving,  setSaving]  = useState(false);
+  const [msg,     setMsg]     = useState(null);
+
+  const save = async () => {
+    if (!val) return setMsg({ t: "err", m: "Enter an email address." });
+    if (!val.toLowerCase().endsWith("@mobitel.lk")) return setMsg({ t: "err", m: "Must be a @mobitel.lk address." });
+    setSaving(true);
+    try {
+      const updated = { ...user, email: val.toLowerCase().trim() };
+      await DB.updateUser(updated);
+      onUpdate(updated);
+    } catch(e) {
+      setMsg({ t: "err", m: "Failed: " + e.message });
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      {msg && <div className={`alert alert-${msg.t === "err" ? "err" : "ok"}`} style={{ marginBottom: 8 }}>{msg.m}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input className="input" type="email" placeholder="yourname@mobitel.lk"
+          value={val} onChange={e => setVal(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && save()} />
+        <button className="btn btn-cyan" onClick={save} disabled={saving}>
+          <Ico n="check" s={13} />{saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Used for OTP verification (password reset & change). Must be @mobitel.lk.</div>
+    </div>
+  );
+}
+
 function ProfilePage({ user, onUpdate }) {
   const [phone,   setPhone]   = useState(user.phone || "");
   const [addrs,   setAddrs]   = useState(user.addresses || []);
@@ -1352,8 +1395,14 @@ function ProfilePage({ user, onUpdate }) {
           <div><label className="label">Full Name</label><input className="input input-ro" readOnly value={user.name} /></div>
           <div><label className="label">Employee ID</label><input className="input input-ro" readOnly value={user.empId} /></div>
           <div>
-            <label className="label">Email</label>
-            <input className="input input-ro" readOnly value={user.email || "Not set — used for password recovery"} />
+            <label className="label">Email {!user.email && <span className="req">*</span>}</label>
+            {user.email ? (
+              <input className="input input-ro" readOnly value={user.email} />
+            ) : (
+              <div>
+                <EmailEditField user={user} onUpdate={onUpdate} />
+              </div>
+            )}
           </div>
           <div>
             <label className="label">Contact Number<span className="req">*</span></label>
@@ -2913,10 +2962,13 @@ function AdminDashboard({ user, onLogout }) {
   const [loadingApps, setLoadingApps] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [admins,       setAdmins]     = useState([]);
-  const [adminForm,    setAdminForm]  = useState({ name: "", empId: "", password: "" });
+  const [adminForm,    setAdminForm]  = useState({ name: "", empId: "", password: "", email: "" });
   const [adminMsg,     setAdminMsg]   = useState(null);
   const [adminLoading, setAdminLoading] = useState(false);
   const [confirmDeleteAdmin, setConfirmDeleteAdmin] = useState(null);
+  // FIX: whitelist visibility toggle — Super Admin can show/hide whitelist from TLs
+  const [whitelistVisible,    setWhitelistVisible]    = useState(false);
+  const [whitelistVisSaving,  setWhitelistVisSaving]  = useState(false);
   const [supplier,     setSupplier]    = useState("PICKME Food");
   const [supplierEdit, setSupplierEdit]= useState(false);
   const [supplierDraft,setSupplierDraft]=useState("PICKME Food");
@@ -2944,6 +2996,7 @@ function AdminDashboard({ user, onLogout }) {
     DB.getCutoffEnabled().then(setCutoffOn);
     DB.getCutoffTimes().then(t => { setCutoffTimes(t); setCutoffDraft(t); });
     DB.getCutoffTLAccess().then(setCutoffTLAccess);
+    DB.getWhitelistVisible().then(setWhitelistVisible);
   }, []);
   useEffect(() => { DB.getAdmins().then(setAdmins); }, []);
   useEffect(() => { DB.getUsers().then(raw => setUsers(raw.map(userFromDb).filter(u => u.empId !== "ADMIN").sort((a, b) => {
@@ -2972,17 +3025,21 @@ function AdminDashboard({ user, onLogout }) {
   const createAdmin = async () => {
     if (!adminForm.name || !adminForm.empId || !adminForm.password)
       return setAdminMsg({ t: "err", m: "All fields are required." });
+    if (adminForm.email && !adminForm.email.toLowerCase().endsWith("@mobitel.lk"))
+      return setAdminMsg({ t: "err", m: "Email must be a @mobitel.lk address." });
     setAdminLoading(true);
     try {
       const existing = await DB.getUserByEmpId(adminForm.empId);
       if (existing) { setAdminLoading(false); return setAdminMsg({ t: "err", m: "Employee ID already exists." }); }
+      const hashed = await hashPw(adminForm.password);
       const newAdmin = {
-        id: uid(), name: adminForm.name, empId: adminForm.empId, password: adminForm.password,
+        id: uid(), name: adminForm.name, empId: adminForm.empId, password: hashed,
+        email: adminForm.email || "",
         role: "admin", phone: "", addresses: [], rosterData: {}, createdAt: todayStr()
       };
       await DB.createUser(newAdmin);
       setAdmins(prev => [newAdmin, ...prev]);
-      setAdminForm({ name: "", empId: "", password: "" });
+      setAdminForm({ name: "", empId: "", password: "", email: "" });
       setAdminMsg({ t: "ok", m: `Team Leader "${adminForm.name}" created successfully.` });
     } catch (e) {
       setAdminMsg({ t: "err", m: "Failed: " + e.message });
@@ -3234,6 +3291,11 @@ function AdminDashboard({ user, onLogout }) {
                     <label className="label">Password<span className="req">*</span></label>
                     <input className="input" type="password" placeholder="••••••••" value={adminForm.password}
                       onChange={e => setAdminForm(p => ({ ...p, password: e.target.value }))} />
+                  </div>
+                  <div style={{ gridColumn: "1/-1" }}>
+                    <label className="label">Email <span style={{ color: C.muted, fontWeight: 400, textTransform: "none", fontSize: 11 }}>(optional — @mobitel.lk, used for password recovery)</span></label>
+                    <input className="input" type="email" placeholder="e.g. john@mobitel.lk" value={adminForm.email}
+                      onChange={e => setAdminForm(p => ({ ...p, email: e.target.value }))} />
                   </div>
                 </div>
                 <button className="btn btn-cyan" onClick={createAdmin} disabled={adminLoading}>
