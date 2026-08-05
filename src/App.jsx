@@ -170,6 +170,31 @@ const todayStr = () => {
 const nowYear = () => new Date().getFullYear();
 const nowMonth = () => new Date().getMonth() + 1;
 
+// FIX: universal download helper — works on corporate networks that block blob/data URI downloads
+// Tries three methods in order: anchor click → window.open → new tab with content
+const triggerDownload = (filename, dataUri) => {
+  try {
+    // Method 1: standard anchor click
+    const a = document.createElement("a");
+    a.href = dataUri;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (e) {
+    try {
+      // Method 2: window.open with data URI
+      const w = window.open();
+      w.document.write(`<a href="${dataUri}" download="${filename}">Click here to download ${filename}</a>`);
+      w.document.close();
+    } catch (e2) {
+      // Method 3: open in new tab so user can save manually
+      window.open(dataUri, "_blank");
+    }
+  }
+};
+
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 const DB = {
   getUsers: async () => {
@@ -2377,12 +2402,11 @@ function AdminRouteView({ apps, user }) {
       XLSX.utils.book_append_sheet(wb, ws, route.replace("Route", "Rt").replace("Road", "Rd").slice(0, 31));
     });
     if (!hasAny) return;
-    // FIX: write to base64 and use data URI — avoids office network blob download blocks
     const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "base64" });
-    Object.assign(document.createElement("a"), {
-      href: "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + wbOut,
-      download: `Transport_${selDate}.xlsx`
-    }).click();
+    triggerDownload(
+      `Transport_${selDate}.xlsx`,
+      "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + wbOut
+    );
   };
 
   const routeColor = {
@@ -2639,12 +2663,11 @@ function AdminDinnerView({ apps, setApps, user }) {
     ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Daily Report");
-    // FIX: write to base64 and use data URI — avoids office network blob download blocks
     const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "base64" });
-    Object.assign(document.createElement("a"), {
-      href: "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + wbOut,
-      download: `Dinner_Report_${selDate}.xlsx`
-    }).click();
+    triggerDownload(
+      `Dinner_Report_${selDate}.xlsx`,
+      "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + wbOut
+    );
   };
 
   const startEdit = (app) => {
@@ -3086,9 +3109,10 @@ function AdminDashboard({ user, onLogout }) {
     const H = ["App ID", "Emp ID", "Name", "Date", "Shift", "Pick/Drop", "Address", "Maps", "Route", "Contact", "Submitted"];
     const R = filtered.map(a => [a.id, a.empId, a.empName, a.date, a.shift, a.pickDrop, a.address, a.mapsLink || "", a.route, a.phone || "", a.submittedAt]);
     const csv = [H, ...R].map(r => r.map(v => `"${String(v || "").replace(/"/g, '""')}"`).join(",")).join("\n");
-    // FIX: use data URI instead of createObjectURL — works on office networks that block blob downloads
-    const uri = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-    Object.assign(document.createElement("a"), { href: uri, download: "transport_applications.csv" }).click();
+    triggerDownload(
+      "transport_applications.csv",
+      "data:text/csv;charset=utf-8," + encodeURIComponent(csv)
+    );
   };
 
   const stat = (lbl, val, col) => (
