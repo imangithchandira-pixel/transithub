@@ -570,58 +570,75 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+
  }`;
 
 const MOBILE_CSS = `
-.m-shell{display:flex;flex-direction:column;min-height:100vh;background:${C.ice};max-width:480px;margin:0 auto;position:relative}
-.m-header{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:100;background:${C.deepTeal};display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:56px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.m-header-title{color:#fff;font-weight:800;font-size:17px;font-family:'Plus Jakarta Sans',sans-serif}
-.m-header-sub{color:${C.cyan};font-size:11px;font-weight:600}
-.m-content{padding:72px 0 80px;min-height:100vh}
-.m-bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:100;background:#fff;border-top:1px solid ${C.grey1};display:flex;height:64px;box-shadow:0 -2px 12px rgba(0,0,0,.08)}
-.m-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;background:transparent;cursor:pointer;transition:all .15s;color:${C.muted};font-size:10px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif}
-.m-nav-btn.active{color:${C.cyan}}
-.m-nav-dot{width:4px;height:4px;border-radius:50%;background:${C.cyan};margin-top:2px}
-.m-card{background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(13,61,86,.08);margin:12px 16px;overflow:hidden}
+.m-shell{
+  --m-bg:#F5F5F7; --m-surface:#FFFFFF; --m-surface2:#F2F2F7; --m-text:#1D1D1F; --m-muted:#8A8A8E;
+  --m-border:#E5E5EA; --m-header-bg:rgba(255,255,255,.82); --m-nav-bg:rgba(255,255,255,.86);
+  --m-shadow:0 1px 3px rgba(0,0,0,.06); --m-accent:${C.cyan};
+  display:flex;flex-direction:column;min-height:100vh;background:var(--m-bg);max-width:480px;margin:0 auto;position:relative;
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Plus Jakarta Sans',sans-serif;
+  color:var(--m-text);transition:background .2s ease
+}
+.m-shell.dark{
+  --m-bg:#000000; --m-surface:#1C1C1E; --m-surface2:#2C2C2E; --m-text:#F5F5F7; --m-muted:#98989D;
+  --m-border:#38383A; --m-header-bg:rgba(20,20,22,.82); --m-nav-bg:rgba(20,20,22,.86);
+  --m-shadow:0 1px 3px rgba(0,0,0,.4)
+}
+.m-header{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:100;background:var(--m-header-bg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:52px;border-bottom:.5px solid var(--m-border)}
+.m-header-title{color:var(--m-text);font-weight:700;font-size:17px;letter-spacing:-.01em}
+.m-header-sub{color:var(--m-muted);font-size:11px;font-weight:500}
+.m-content{padding:68px 0 84px;min-height:100vh}
+.m-bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:100;background:var(--m-nav-bg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:.5px solid var(--m-border);display:flex;height:64px;padding-bottom:env(safe-area-inset-bottom,0)}
+.m-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:transparent;cursor:pointer;transition:color .15s;color:var(--m-muted);font-size:10px;font-weight:600;letter-spacing:0}
+.m-nav-btn.active{color:var(--m-accent)}
+.m-nav-dot{width:0;height:0}
+.m-card{background:var(--m-surface);border-radius:14px;box-shadow:var(--m-shadow);margin:10px 16px;overflow:hidden;border:.5px solid var(--m-border)}
 .m-card-pad{padding:16px}
-.m-section-title{font-size:13px;font-weight:800;color:${C.muted};text-transform:uppercase;letter-spacing:.06em;padding:16px 16px 8px}
-.m-big-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:20px;border-radius:16px;border:none;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:15px;transition:all .15s;width:100%}
-.m-big-btn:active{transform:scale(.97)}
-.m-input{width:100%;padding:14px 16px;border:1.5px solid ${C.border};border-radius:12px;font-size:16px;font-family:'Plus Jakarta Sans',sans-serif;color:${C.text};outline:none;background:#fff;-webkit-appearance:none}
-.m-input:focus{border-color:${C.cyan};box-shadow:0 0 0 3px rgba(0,180,216,.13)}
-.m-input-auto{border-color:${C.cyan};background:${C.cyanLight}}
-.m-label{font-size:11px;font-weight:800;color:${C.muted};text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:block}
-.m-submit-btn{width:calc(100% - 32px);margin:0 16px;padding:18px;border-radius:16px;border:none;background:${C.cyan};color:#fff;font-size:17px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;cursor:pointer;box-shadow:0 4px 16px rgba(0,180,216,.4);transition:all .15s}
-.m-submit-btn:active{transform:scale(.97)}
-.m-submit-btn:disabled{opacity:.4;cursor:not-allowed}
-.m-submit-btn-red{background:${C.red};box-shadow:0 4px 16px rgba(224,59,46,.4)}
-.m-submit-btn-purple{background:${C.purple};box-shadow:0 4px 16px rgba(124,58,237,.4)}
-.m-option{display:flex;align-items:center;gap:14px;padding:16px;border:2px solid ${C.grey1};border-radius:14px;cursor:pointer;transition:all .15s;background:#fff}
-.m-option.sel{border-color:${C.cyan};background:${C.cyanLight}}
-.m-option-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.m-option-text{font-weight:700;font-size:15px;color:${C.text}}
-.m-option-sub{font-size:12px;color:${C.muted};margin-top:2px}
-.m-alert{margin:0 16px 12px;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:600}
-.m-alert-err{background:${C.redLight};color:${C.red};border-left:4px solid ${C.red}}
-.m-alert-ok{background:${C.greenLight};color:${C.green};border-left:4px solid ${C.green}}
-.m-alert-info{background:${C.cyanLight};color:${C.midTeal};border-left:4px solid ${C.cyan}}
-.m-alert-warn{background:${C.orangeLight};color:${C.orange};border-left:4px solid ${C.orange}}
+.m-section-title{font-size:12px;font-weight:600;color:var(--m-muted);text-transform:uppercase;letter-spacing:.04em;padding:18px 16px 6px}
+.m-big-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:20px;border-radius:14px;border:none;cursor:pointer;font-weight:700;font-size:15px;transition:opacity .15s;width:100%}
+.m-big-btn:active{opacity:.75}
+.m-input{width:100%;padding:13px 14px;border:.5px solid var(--m-border);border-radius:10px;font-size:16px;color:var(--m-text);outline:none;background:var(--m-surface2);-webkit-appearance:none}
+.m-input:focus{border-color:var(--m-accent);box-shadow:0 0 0 3px rgba(0,180,216,.15)}
+.m-input-auto{border-color:var(--m-accent);background:${C.cyanLight}}
+.m-label{font-size:11px;font-weight:600;color:var(--m-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;display:block}
+.m-submit-btn{width:calc(100% - 32px);margin:0 16px;padding:16px;border-radius:14px;border:none;background:var(--m-accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.m-submit-btn:active{opacity:.8}
+.m-submit-btn:disabled{opacity:.35;cursor:not-allowed}
+.m-submit-btn-red{background:${C.red}}
+.m-submit-btn-purple{background:${C.purple}}
+.m-option{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--m-border);border-radius:12px;cursor:pointer;transition:all .15s;background:var(--m-surface)}
+.m-option.sel{border-color:var(--m-accent);background:${C.cyanLight}}
+.m-option-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.m-option-text{font-weight:600;font-size:15px;color:var(--m-text)}
+.m-option-sub{font-size:12px;color:var(--m-muted);margin-top:2px}
+.m-alert{margin:0 16px 12px;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:500}
+.m-alert-err{background:${C.redLight};color:${C.red};border-left:3px solid ${C.red}}
+.m-alert-ok{background:${C.greenLight};color:${C.green};border-left:3px solid ${C.green}}
+.m-alert-info{background:${C.cyanLight};color:${C.midTeal};border-left:3px solid ${C.cyan}}
+.m-alert-warn{background:${C.orangeLight};color:${C.orange};border-left:3px solid ${C.orange}}
 .m-step-header{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
-.m-step-num{width:28px;height:28px;border-radius:50%;background:${C.cyan};color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.m-step-title{font-weight:800;font-size:15px;color:${C.text}}
-.m-back-btn{background:none;border:none;cursor:pointer;color:${C.cyan};font-weight:700;font-size:14px;font-family:'Plus Jakarta Sans',sans-serif;padding:0;display:flex;align-items:center;gap:4px}
-.m-summary-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid ${C.grey1}}
+.m-step-num{width:26px;height:26px;border-radius:50%;background:var(--m-accent);color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.m-step-title{font-weight:700;font-size:15px;color:var(--m-text)}
+.m-back-btn{background:none;border:none;cursor:pointer;color:var(--m-accent);font-weight:600;font-size:14px;padding:0;display:flex;align-items:center;gap:4px}
+.m-summary-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:.5px solid var(--m-border)}
 .m-summary-row:last-child{border-bottom:none}
-.m-summary-label{font-size:12px;color:${C.muted};font-weight:600}
-.m-summary-val{font-size:13px;font-weight:700;color:${C.text};text-align:right;max-width:60%}
-.m-badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.m-summary-label{font-size:12px;color:var(--m-muted);font-weight:500}
+.m-summary-val{font-size:13px;font-weight:600;color:var(--m-text);text-align:right;max-width:60%}
+.m-badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.m-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px}
+.m-toggle-row + .m-toggle-row{border-top:.5px solid var(--m-border)}
+.m-switch{width:48px;height:28px;border-radius:14px;position:relative;cursor:pointer;transition:background .2s;border:none;flex-shrink:0}
+.m-switch-knob{width:24px;height:24px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.m-copyright{text-align:center;padding:24px 16px 4px;font-size:11px;color:var(--m-muted);letter-spacing:.01em}
 .m-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:0 16px}
-.m-cal-header{text-align:center;font-size:9px;font-weight:800;color:${C.muted};text-transform:uppercase;padding:4px 0}
-.m-cal-day{border-radius:10px;padding:6px 2px;text-align:center;border:1.5px solid ${C.grey1};transition:all .15s;min-height:46px}
-.m-cal-day.today{border-color:${C.cyan};box-shadow:0 0 0 2px rgba(0,180,216,.2)}
-.m-cal-day.off-day{background:${C.grey0};opacity:.6}
-.m-cal-day.work-day{background:#fff;cursor:pointer}
-.m-cal-day.work-day:active{border-color:${C.cyan};background:${C.cyanLight}}
-.m-cal-day.selected{border-color:${C.cyan};background:${C.cyanLight}}
+.m-cal-header{text-align:center;font-size:9px;font-weight:600;color:var(--m-muted);text-transform:uppercase;padding:4px 0}
+.m-cal-day{border-radius:10px;padding:6px 2px;text-align:center;border:1px solid var(--m-border);transition:all .15s;min-height:46px}
+.m-cal-day.today{border-color:var(--m-accent);box-shadow:0 0 0 2px rgba(0,180,216,.2)}
+.m-cal-day.off-day{background:var(--m-surface2);opacity:.6}
+.m-cal-day.work-day{background:var(--m-surface);cursor:pointer}
+.m-cal-day.work-day:active{border-color:var(--m-accent);background:${C.cyanLight}}
+.m-cal-day.selected{border-color:var(--m-accent);background:${C.cyanLight}}
 .m-cal-day.empty{border-color:transparent;background:transparent;min-height:0}
-.m-cal-day-num{font-size:12px;font-weight:800;color:${C.text}}
+.m-cal-day-num{font-size:12px;font-weight:600;color:var(--m-text)}
 .m-cal-chip{font-size:8px;font-weight:700;padding:1px 4px;border-radius:4px;line-height:1.4;margin-top:2px;display:inline-block}
 `;
 
@@ -643,6 +660,10 @@ const Ico = ({ n, s = 16, c = "currentColor" }) => {
     team:     "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
     settings: "M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96a6.98 6.98 0 00-1.62-.94l-.36-2.54A.484.484 0 0014 2h-4c-.25 0-.46.18-.49.42l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 00-.59.22L2.63 8.48a.48.48 0 00.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.37 1.04.7 1.62.94l.36 2.54c.05.24.26.42.5.42h4c.25 0 .46-.18.49-.42l.36-2.54c.59-.24 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
     dinner:   "M18.06 22.99h1.66c.84 0 1.53-.64 1.63-1.46L23 5.05h-5V1h-1.97v4.05h-4.97l.3 2.34c1.71.47 3.31 1.32 4.27 2.26 1.44 1.42 2.43 2.89 2.43 5.29v8.05zM1 21.99V21h15.03v.99c0 .55-.45 1-1.01 1H2.01c-.56 0-1.01-.45-1.01-1zm15.03-7c0-4.5-6.72-5-8.99-5-2.28 0-9.01.5-9.01 5h18z",
+    home:     "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z",
+    lock:     "M12 17a2 2 0 002-2 2 2 0 00-2-2 2 2 0 00-2 2 2 2 0 002 2zm6-9a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h1V6a5 5 0 0110 0v2h1zm-6-5a3 3 0 00-3 3v2h6V6a3 3 0 00-3-3z",
+    sun:      "M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91l-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91l1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z",
+    moon:     "M9.37 5.51A7.35 7.35 0 009.1 7.5c0 4.08 3.32 7.4 7.4 7.4.68 0 1.35-.09 1.99-.27A7.014 7.014 0 0112 19c-3.86 0-7-3.14-7-7 0-2.93 1.81-5.45 4.37-6.49z",
   };
   return <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d={paths[n] || ""} /></svg>;
 };
@@ -3757,10 +3778,10 @@ function useMobile(breakpoint = 768) {
 
 // ─── Bottom nav config ─────────────────────────────────────────────────────
 const MOBILE_NAV = [
-  ["home", "Home", "🏠"],
-  ["apply", "Apply", "🚌"],
-  ["roster", "Roster", "📅"],
-  ["profile", "Profile", "👤"],
+  ["home", "Home", "home"],
+  ["apply", "Apply", "bus"],
+  ["roster", "Roster", "cal"],
+  ["profile", "Profile", "user"],
 ];
 
 const MOBILE_TITLES = {
@@ -3770,12 +3791,18 @@ const MOBILE_TITLES = {
   profile: "My Profile",
 };
 
+// FIX: persisted light/dark preference for the mobile shell only
+const MOBILE_THEME_KEY = "th_mobile_theme";
+
 // ════════════════════════════════════════════════════════════════════════════
 // MOBILE SHELL — header, screen router, sticky bottom nav
 // ════════════════════════════════════════════════════════════════════════════
 function MobileEmployeeShell({ user: initUser, onLogout }) {
   const [screen, setScreen] = useState("home");
   const [user, setUser] = useState(initUser);
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem(MOBILE_THEME_KEY) || "light"; } catch { return "light"; }
+  });
 
   // Inject the mobile design system (already defined earlier in App.jsx as
   // the MOBILE_CSS string) once, for as long as this shell is mounted.
@@ -3786,8 +3813,12 @@ function MobileEmployeeShell({ user: initUser, onLogout }) {
     return () => document.head.removeChild(el);
   }, []);
 
+  useEffect(() => {
+    try { localStorage.setItem(MOBILE_THEME_KEY, theme); } catch {}
+  }, [theme]);
+
   return (
-    <div className="m-shell">
+    <div className={`m-shell${theme === "dark" ? " dark" : ""}`}>
       <div className="m-header">
         <div>
           <div className="m-header-title">
@@ -3798,8 +3829,9 @@ function MobileEmployeeShell({ user: initUser, onLogout }) {
         {screen !== "home" && (
           <button
             onClick={() => setScreen("home")}
-            style={{ background: "rgba(255,255,255,.12)", border: "none", borderRadius: 9, color: "#fff", fontWeight: 700, fontSize: 13, padding: "8px 12px", cursor: "pointer" }}>
-            ← Home
+            style={{ background: "none", border: "none", color: "var(--m-accent)", fontWeight: 600, fontSize: 15, padding: "8px 4px", cursor: "pointer", display: "flex", alignItems: "center", gap: 3 }}>
+            <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M8 1L1.5 7.5L8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Home
           </button>
         )}
       </div>
@@ -3808,15 +3840,14 @@ function MobileEmployeeShell({ user: initUser, onLogout }) {
         {screen === "home" && <MobileHome user={user} setScreen={setScreen} />}
         {screen === "apply" && <MobileTransportForm user={user} onDone={() => setScreen("home")} />}
         {screen === "roster" && <MobileRoster user={user} onUserUpdate={setUser} />}
-        {screen === "profile" && <MobileProfile user={user} onUpdate={setUser} onLogout={onLogout} />}
+        {screen === "profile" && <MobileProfile user={user} onUpdate={setUser} onLogout={onLogout} theme={theme} onThemeChange={setTheme} />}
       </div>
 
       <div className="m-bottom-nav">
         {MOBILE_NAV.map(([id, lbl, icon]) => (
           <button key={id} className={`m-nav-btn${screen === id ? " active" : ""}`} onClick={() => setScreen(id)}>
-            <span style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
+            <Ico n={icon} s={22} c={screen === id ? "var(--m-accent)" : "var(--m-muted)"} />
             {lbl}
-            {screen === id && <span className="m-nav-dot" />}
           </button>
         ))}
       </div>
@@ -4049,7 +4080,7 @@ function MobileTransportForm({ user, onDone }) {
             : <span><b>{submittedForm.date}</b> · <b>{submittedForm.shift}</b> · <b>{submittedForm.pickDrop}</b></span>}
         </div>
         {(submittedForm.wantsDinner || submittedForm.isDinnerOnly) && submittedForm.dinnerMeal && (
-          <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>🍽 Dinner: <b style={{ color: C.text }}>{submittedForm.dinnerMeal}</b></div>
+          <div style={{ fontSize: 13, color: "var(--m-muted)", marginBottom: 8 }}>Dinner: <b style={{ color: "var(--m-text)" }}>{submittedForm.dinnerMeal}</b></div>
         )}
         <button className="m-submit-btn" style={{ margin: "18px 0 0" }} onClick={() => { reset(); onDone(); }}>Back to Home</button>
         <div style={{ marginTop: 12 }}>
@@ -4144,7 +4175,7 @@ function MobileTransportForm({ user, onDone }) {
 
       {dinnerMode !== "none" && !dayUsage.hasDinner && (
         <div className="m-card"><div className="m-card-pad">
-          <label className="m-label">🍽 Dinner (required for this shift)</label>
+          <label className="m-label" style={{ display: "flex", alignItems: "center", gap: 6 }}><Ico n="dinner" s={13} c={C.purple} />Dinner (required for this shift)</label>
           <div style={{ display: "flex", gap: 10, marginBottom: form.wantsDinner ? 12 : 0 }}>
             {[[true, "Yes, dinner"], [false, "No dinner"]].map(([val, lbl]) => {
               const on = form.wantsDinner === val;
@@ -4184,14 +4215,16 @@ function MobileTransportForm({ user, onDone }) {
   return (
     <div>
       {/* Mode switcher — mirrors the desktop Auto-fill / Manual / Dinner Only toggle */}
-      <div style={{ display: "flex", gap: 0, background: "#fff", borderRadius: 14, padding: 4, margin: "0 16px 12px", border: `1px solid ${C.grey1}` }}>
-        {[["auto", "⚡ Auto"], ["manual", "✏️ Manual"], ["dinner", "🍽 Dinner"]].map(([m, lbl]) => (
+      <div style={{ display: "flex", gap: 0, background: "var(--m-surface)", borderRadius: 12, padding: 3, margin: "0 16px 12px", border: "1px solid var(--m-border)" }}>
+        {[["auto", "Auto", "check"], ["manual", "Manual", "edit"], ["dinner", "Dinner", "dinner"]].map(([m, lbl, icon]) => (
           <button key={m} onClick={() => switchMode(m)}
             style={{
-              flex: 1, minHeight: 44, borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12,
+              flex: 1, minHeight: 40, borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 12,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
               background: mode === m ? (m === "dinner" ? C.purple : m === "manual" ? C.deepTeal : C.cyan) : "transparent",
-              color: mode === m ? "#fff" : C.muted,
+              color: mode === m ? "#fff" : "var(--m-muted)",
             }}>
+            <Ico n={icon} s={13} c={mode === m ? "#fff" : "var(--m-muted)"} />
             {lbl}
           </button>
         ))}
@@ -4355,8 +4388,8 @@ function MobileRoster({ user, onUserUpdate }) {
           </select>
         </div>
         {msg && <div className={`m-alert m-alert-${msg.t === "err" ? "err" : "ok"}`} style={{ margin: "0 0 12px" }}>{msg.m}</div>}
-        <button className="m-submit-btn" style={{ background: C.cyan }} onClick={() => fileRef.current?.click()}>
-          📊 Upload Roster Excel
+        <button className="m-submit-btn" style={{ background: C.cyan, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => fileRef.current?.click()}>
+          <Ico n="upload" s={16} c="#fff" />Upload Roster Excel
         </button>
         <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={e => processFile(e.target.files[0])} />
         {preview && pendingData && (
@@ -4393,7 +4426,7 @@ function MobileRoster({ user, onUserUpdate }) {
 // ════════════════════════════════════════════════════════════════════════════
 // MY PROFILE — contact info, addresses, change password (same OTP flow as desktop)
 // ════════════════════════════════════════════════════════════════════════════
-function MobileProfile({ user, onUpdate, onLogout }) {
+function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
   const [phone, setPhone] = useState(user.phone || "");
   const [msg, setMsg] = useState(null);
   const [addrs, setAddrs] = useState(user.addresses || []);
@@ -4541,7 +4574,27 @@ function MobileProfile({ user, onUpdate, onLogout }) {
       </div></div>
 
       <div className="m-card"><div className="m-card-pad">
-        <label className="m-label" style={{ marginBottom: 10, display: "block" }}>🔒 Change Password</label>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--m-text)" }}>Appearance</div>
+      </div>
+        <div className="m-toggle-row">
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Ico n={theme === "dark" ? "moon" : "sun"} s={18} c="var(--m-accent)" />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m-text)" }}>Dark Mode</div>
+              <div style={{ fontSize: 12, color: "var(--m-muted)" }}>{theme === "dark" ? "On" : "Off"}</div>
+            </div>
+          </div>
+          <button
+            className="m-switch"
+            style={{ background: theme === "dark" ? C.cyan : "var(--m-border)" }}
+            onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")}>
+            <span className="m-switch-knob" style={{ left: theme === "dark" ? 22 : 2 }} />
+          </button>
+        </div>
+      </div>
+
+      <div className="m-card"><div className="m-card-pad">
+        <label className="m-label" style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Ico n="lock" s={13} c="var(--m-muted)" />Change Password</label>
         {pwMsg && <div className={`m-alert m-alert-${pwMsg.t === "err" ? "err" : "ok"}`} style={{ margin: "0 0 10px" }}>{pwMsg.m}</div>}
         {pwStep === "form" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -4569,6 +4622,7 @@ function MobileProfile({ user, onUpdate, onLogout }) {
       <div style={{ padding: "0 16px 24px" }}>
         <button className="m-submit-btn m-submit-btn-red" style={{ margin: 0 }} onClick={onLogout}>Sign Out</button>
       </div>
+      <div className="m-copyright">© 2026 SACI. All Rights Reserved.</div>
     </div>
   );
 }
