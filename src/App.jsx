@@ -490,7 +490,30 @@ const parseOrdinal = (s) => {
 const buildDate = (y, m, d) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
-const CSS = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap'); *,*::before,*::after{box-sizing:border-box;margin:0;padding:0} html,body{font-family:'Plus Jakarta Sans',sans-serif;background:${C.ice};color:${C.text};font-size:14px} input,select,textarea,button{font-family:inherit} .shell{display:flex;min-height:100vh} .sidebar{width:232px;flex-shrink:0;background:linear-gradient(180deg,${C.deepTeal} 0%,${C.midTeal} 100%);display:flex;flex-direction:column} .main-area{flex:1;overflow-y:auto;padding:28px 30px;min-height:100vh} .sb-logo{display:flex;align-items:center;gap:10px;padding:22px 18px 14px} .sb-logo-icon{width:36px;height:36px;background:rgba(0,180,216,.22);border-radius:10px;display:flex;align-items:center;justify-content:center} .sb-logo-title{color:#fff;font-weight:800;font-size:15px} .sb-logo-sub{color:rgba(255,255,255,.45);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em} .sb-user{margin:0 10px 6px;background:rgba(255,255,255,.09);border-radius:10px;padding:10px 12px} .sb-user-name{color:#fff;font-weight:700;font-size:13px} .sb-user-id{color:rgba(255,255,255,.45);font-size:11px;margin-top:2px} .sb-div{height:1px;background:rgba(255,255,255,.08);margin:6px 0} .sb-nav{padding:0 8px;display:flex;flex-direction:column;gap:2px} .sb-item{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:9px;font-size:13px;font-weight:600;color:rgba(255,255,255,.6);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:all .15s} .sb-item:hover{background:rgba(255,255,255,.09);color:#fff} .sb-item.active{background:rgba(0,180,216,.3);color:#fff} .sb-spacer{flex:1} .sb-bottom{padding:8px 8px 16px} .card{background:${C.white};border-radius:14px;box-shadow:0 1px 12px rgba(13,61,86,.07);padding:20px} .card-0{background:${C.white};border-radius:14px;box-shadow:0 1px 12px rgba(13,61,86,.07);overflow:hidden} .page-title{font-size:20px;font-weight:800;color:${C.text};margin-bottom:3px} .page-sub{font-size:13px;color:${C.muted};margin-bottom:22px} .sec-title{font-size:14px;font-weight:700;color:${C.text};margin-bottom:14px} .label{display:block;font-size:11px;font-weight:700;color:${C.muted};text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px} .req{color:${C.red};margin-left:2px} .input{width:100%;padding:10px 13px;border:1.5px solid ${C.border};border-radius:9px;font-size:13px;color:${C.text};outline:none;transition:border .15s} .input:focus{border-color:${C.cyan};box-shadow:0 0 0 3px rgba(0,180,216,.13)} .input::placeholder{color:${C.border}} .input-auto{border-color:${C.cyan};background:${C.cyanLight}} .input-ro{background:${C.ice};color:${C.muted};cursor:default} .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all .15s} .btn-cyan{background:${C.cyan};color:#fff}.btn-cyan:hover{background:#0099bb} .btn-red{background:${C.red};color:#fff;width:100%;justify-content:center;padding:13px;font-size:14px} .btn-outline{background:transparent;border:1.5px solid ${C.cyan};color:${C.cyan}}.btn-outline:hover{background:${C.cyanLight}} .btn-ghost{background:${C.grey0};color:${C.muted};border:1.5px solid ${C.grey1}}.btn-ghost:hover{background:${C.grey1}} .btn-sm{padding:5px 11px;font-size:11px;border-radius:7px} .btn:disabled{opacity:.38;cursor:not-allowed;pointer-events:none} .alert{padding:10px 14px;border-radius:9px;font-size:13px;font-weight:500;margin-bottom:14px} .alert-err{background:${C.redLight};color:${C.red};border-left:3px solid ${C.red}} .alert-ok{background:${C.greenLight};color:${C.green};border-left:3px solid ${C.green}} .alert-info{background:${C.cyanLight};color:${C.midTeal};border-left:3px solid ${C.cyan}} .alert-warn{background:${C.orangeLight};color:${C.orange};border-left:3px solid ${C.orange}} .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700} .badge-cyan{background:${C.cyanLight};color:${C.midTeal}} .badge-green{background:${C.greenLight};color:${C.green}} .badge-orange{background:${C.orangeLight};color:${C.orange}} .badge-red{background:${C.redLight};color:${C.red}} .badge-purple{background:${C.purpleLight};color:${C.purple}} .badge-grey{background:${C.grey1};color:${C.muted}} .tbl{width:100%;border-collapse:collapse;font-size:13px} .tbl th{background:${C.ice};color:${C.muted};font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:10px 14px;text-align:left} .tbl td{padding:11px 14px;border-bottom:1px solid ${C.grey1};vertical-align:middle} .tbl tr:last-child td{border-bottom:none} .tbl tr:hover td{background:${C.ice}} .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px} .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px} .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px} .col2{grid-column:1/-1} .stack{display:flex;flex-direction:column;gap:18px} .stack-sm{display:flex;flex-direction:column;gap:10px} .flex-b{display:flex;justify-content:space-between;align-items:center} .flex-g{display:flex;gap:10px;align-items:center;flex-wrap:wrap} .tab-row{display:flex;border-bottom:2px solid ${C.grey1};margin-bottom:18px} .tab-btn{padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:transparent;color:${C.muted};border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s} .tab-btn.active{color:${C.cyan};border-bottom-color:${C.cyan}} .upload-zone{border:2px dashed ${C.border};border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .15s} .upload-zone:hover,.upload-zone.drag{border-color:${C.cyan};background:${C.cyanLight}} .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px} .cal-header{text-align:center;font-size:10px;font-weight:800;color:${C.muted};text-transform:uppercase;padding:4px 0} .cal-day{border-radius:10px;padding:7px 4px;text-align:center;border:1.5px solid ${C.grey1};transition:all .15s;min-height:52px} .cal-day.today{border-color:${C.cyan};box-shadow:0 0 0 2px rgba(0,180,216,.25)} .cal-day.off-day{background:${C.grey0};opacity:.65} .cal-day.work-day{background:${C.white};cursor:pointer}.cal-day.work-day:hover{border-color:${C.cyan};background:${C.cyanLight}} .cal-day.selected{border-color:${C.cyan};background:${C.cyanLight}} .cal-day.empty{border-color:transparent;background:transparent;min-height:0} .cal-day-num{font-size:13px;font-weight:800;color:${C.text}} .cal-shift-chip{font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;line-height:1.4;margin-top:3px;display:inline-block} .radio-group{display:flex;flex-direction:column;gap:7px} .radio-opt{display:flex;align-items:center;gap:10px;padding:9px 13px;border:1.5px solid ${C.grey1};border-radius:9px;cursor:pointer;transition:all .15s} .radio-opt:hover{border-color:${C.cyan};background:${C.cyanLight}} .radio-opt.sel{border-color:${C.cyan};background:${C.cyanLight};color:${C.deepTeal};font-weight:700} .radio-opt.disabled{opacity:.4;cursor:not-allowed;pointer-events:none} .radio-dot{width:17px;height:17px;border-radius:50%;border:2px solid ${C.border};flex-shrink:0;display:flex;align-items:center;justify-content:center} .radio-dot.on{border-color:${C.cyan};background:${C.cyan}} .radio-inner{width:6px;height:6px;border-radius:50%;background:#fff} .addr-card{border:1.5px solid ${C.grey1};border-radius:10px;padding:14px;cursor:pointer;transition:all .15s} .addr-card:hover{border-color:${C.cyan}} .addr-card.sel{border-color:${C.cyan};background:${C.cyanLight}} .route-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${C.cyanLight};color:${C.midTeal};margin-top:6px} ::-webkit-scrollbar{width:5px;height:5px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px}
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap'); *,*::before,*::after{box-sizing:border-box;margin:0;padding:0} html,body{font-family:'Plus Jakarta Sans',sans-serif;background:${C.ice};color:${C.text};font-size:14px} input,select,textarea,button{font-family:inherit} .shell{display:flex;min-height:100vh} .sidebar{width:232px;flex-shrink:0;background:linear-gradient(180deg,${C.deepTeal} 0%,${C.midTeal} 100%);display:flex;flex-direction:column} .main-area{flex:1;overflow-y:auto;padding:28px 30px;min-height:100vh} .sb-logo{display:flex;align-items:center;gap:10px;padding:22px 18px 14px} .sb-logo-icon{width:36px;height:36px;background:rgba(0,180,216,.22);border-radius:10px;display:flex;align-items:center;justify-content:center} .sb-logo-title{color:#fff;font-weight:800;font-size:15px} .sb-logo-sub{color:rgba(255,255,255,.45);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em} .sb-user{margin:0 10px 6px;background:rgba(255,255,255,.09);border-radius:10px;padding:10px 12px} .sb-user-name{color:#fff;font-weight:700;font-size:13px} .sb-user-id{color:rgba(255,255,255,.45);font-size:11px;margin-top:2px} .sb-div{height:1px;background:rgba(255,255,255,.08);margin:6px 0} .sb-nav{padding:0 8px;display:flex;flex-direction:column;gap:2px} .sb-item{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:9px;font-size:13px;font-weight:600;color:rgba(255,255,255,.6);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:all .15s} .sb-item:hover{background:rgba(255,255,255,.09);color:#fff} .sb-item.active{background:rgba(0,180,216,.3);color:#fff} .sb-spacer{flex:1} .sb-bottom{padding:8px 8px 16px} .card{background:${C.white};border-radius:14px;box-shadow:0 1px 12px rgba(13,61,86,.07);padding:20px} .card-0{background:${C.white};border-radius:14px;box-shadow:0 1px 12px rgba(13,61,86,.07);overflow:hidden} .page-title{font-size:20px;font-weight:800;color:${C.text};margin-bottom:3px} .page-sub{font-size:13px;color:${C.muted};margin-bottom:22px} .sec-title{font-size:14px;font-weight:700;color:${C.text};margin-bottom:14px} .label{display:block;font-size:11px;font-weight:700;color:${C.muted};text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px} .req{color:${C.red};margin-left:2px} .input{width:100%;padding:10px 13px;border:1.5px solid ${C.border};border-radius:9px;font-size:13px;color:${C.text};outline:none;transition:border .15s} .input:focus{border-color:${C.cyan};box-shadow:0 0 0 3px rgba(0,180,216,.13)} .input::placeholder{color:${C.border}} .input-auto{border-color:${C.cyan};background:${C.cyanLight}} .input-ro{background:${C.ice};color:${C.muted};cursor:default} .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all .15s} .btn-cyan{background:${C.cyan};color:#fff}.btn-cyan:hover{background:#0099bb} .btn-red{background:${C.red};color:#fff;width:100%;justify-content:center;padding:13px;font-size:14px} .btn-outline{background:transparent;border:1.5px solid ${C.cyan};color:${C.cyan}}.btn-outline:hover{background:${C.cyanLight}} .btn-ghost{background:${C.grey0};color:${C.muted};border:1.5px solid ${C.grey1}}.btn-ghost:hover{background:${C.grey1}} .btn-sm{padding:5px 11px;font-size:11px;border-radius:7px} .btn:disabled{opacity:.38;cursor:not-allowed;pointer-events:none} .alert{padding:10px 14px;border-radius:9px;font-size:13px;font-weight:500;margin-bottom:14px} .alert-err{background:${C.redLight};color:${C.red};border-left:3px solid ${C.red}} .alert-ok{background:${C.greenLight};color:${C.green};border-left:3px solid ${C.green}} .alert-info{background:${C.cyanLight};color:${C.midTeal};border-left:3px solid ${C.cyan}} .alert-warn{background:${C.orangeLight};color:${C.orange};border-left:3px solid ${C.orange}} .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700} .badge-cyan{background:${C.cyanLight};color:${C.midTeal}} .badge-green{background:${C.greenLight};color:${C.green}} .badge-orange{background:${C.orangeLight};color:${C.orange}} .badge-red{background:${C.redLight};color:${C.red}} .badge-purple{background:${C.purpleLight};color:${C.purple}} .badge-grey{background:${C.grey1};color:${C.muted}} .tbl{width:100%;border-collapse:collapse;font-size:13px} .tbl th{background:${C.ice};color:${C.muted};font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:10px 14px;text-align:left} .tbl td{padding:11px 14px;border-bottom:1px solid ${C.grey1};vertical-align:middle} .tbl tr:last-child td{border-bottom:none} .tbl tr:hover td{background:${C.ice}} .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px} .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px} .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px} .col2{grid-column:1/-1} .stack{display:flex;flex-direction:column;gap:18px} .stack-sm{display:flex;flex-direction:column;gap:10px} .flex-b{display:flex;justify-content:space-between;align-items:center} .flex-g{display:flex;gap:10px;align-items:center;flex-wrap:wrap} .tab-row{display:flex;border-bottom:2px solid ${C.grey1};margin-bottom:18px} .tab-btn{padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:transparent;color:${C.muted};border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s} .tab-btn.active{color:${C.cyan};border-bottom-color:${C.cyan}} .upload-zone{border:2px dashed ${C.border};border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .15s} .upload-zone:hover,.upload-zone.drag{border-color:${C.cyan};background:${C.cyanLight}} .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px} .cal-header{text-align:center;font-size:10px;font-weight:800;color:${C.muted};text-transform:uppercase;padding:4px 0} .cal-day{border-radius:10px;padding:7px 4px;text-align:center;border:1.5px solid ${C.grey1};transition:all .15s;min-height:52px} .cal-day.today{border-color:${C.cyan};box-shadow:0 0 0 2px rgba(0,180,216,.25)} .cal-day.off-day{background:${C.grey0};opacity:.65} .cal-day.work-day{background:${C.white};cursor:pointer}.cal-day.work-day:hover{border-color:${C.cyan};background:${C.cyanLight}} .cal-day.selected{border-color:${C.cyan};background:${C.cyanLight}} .cal-day.empty{border-color:transparent;background:transparent;min-height:0} .cal-day-num{font-size:13px;font-weight:800;color:${C.text}} .cal-shift-chip{font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;line-height:1.4;margin-top:3px;display:inline-block} .radio-group{display:flex;flex-direction:column;gap:7px} .radio-opt{display:flex;align-items:center;gap:10px;padding:9px 13px;border:1.5px solid ${C.grey1};border-radius:9px;cursor:pointer;transition:all .15s} .radio-opt:hover{border-color:${C.cyan};background:${C.cyanLight}} .radio-opt.sel{border-color:${C.cyan};background:${C.cyanLight};color:${C.deepTeal};font-weight:700} .radio-opt.disabled{opacity:.4;cursor:not-allowed;pointer-events:none} .radio-dot{width:17px;height:17px;border-radius:50%;border:2px solid ${C.border};flex-shrink:0;display:flex;align-items:center;justify-content:center} .radio-dot.on{border-color:${C.cyan};background:${C.cyan}} .radio-inner{width:6px;height:6px;border-radius:50%;background:#fff} .addr-card{border:1.5px solid ${C.grey1};border-radius:10px;padding:14px;cursor:pointer;transition:all .15s} .addr-card:hover{border-color:${C.cyan}} .addr-card.sel{border-color:${C.cyan};background:${C.cyanLight}} .route-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${C.cyanLight};color:${C.midTeal};margin-top:6px}
+ .auth-shell{min-height:100vh;display:flex}
+ .auth-brand{flex:1.1;position:relative;overflow:hidden;background:linear-gradient(160deg,${C.deepTeal} 0%,${C.midTeal} 60%,${C.cyan} 170%);display:flex;flex-direction:column;justify-content:center;padding:64px 60px}
+ .auth-brand-inner{position:relative;z-index:2;max-width:380px}
+ .auth-brand-logo{display:inline-flex;align-items:center;gap:10px;margin-bottom:48px}
+ .auth-brand-title{color:#fff;font-weight:800;font-size:15px}
+ .auth-brand-sub{color:rgba(255,255,255,.5);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+ .auth-headline{color:#fff;font-size:34px;font-weight:800;line-height:1.22;letter-spacing:-.01em;margin-bottom:16px}
+ .auth-subtext{color:rgba(255,255,255,.62);font-size:14px;line-height:1.65;margin-bottom:40px;max-width:320px}
+ .auth-stats{display:flex;gap:32px;position:relative;z-index:2}
+ .auth-stat-num{color:#fff;font-size:22px;font-weight:800}
+ .auth-stat-lbl{color:rgba(255,255,255,.5);font-size:11px;font-weight:600;margin-top:2px}
+ .auth-route-svg{position:absolute;left:-10%;right:-10%;bottom:-10px;width:120%;height:160px;z-index:1}
+ .auth-panel{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 24px;background:${C.ice}}
+ .auth-card{width:100%;max-width:380px}
+ .auth-mobile-brand{display:none}
+ .auth-form-wrap{background:#fff;border-radius:20px;box-shadow:0 10px 40px rgba(13,61,86,.12);padding:32px}
+ .auth-title{font-size:21px;font-weight:800;color:${C.text};margin-bottom:4px}
+ .auth-desc{font-size:13px;color:${C.muted};margin-bottom:22px;line-height:1.5}
+ .auth-seg{display:flex;background:${C.grey0};border-radius:12px;padding:4px;margin-bottom:20px;border:1px solid ${C.grey1}}
+ .auth-seg-btn{flex:1;padding:10px;border-radius:9px;border:none;background:transparent;font-weight:700;font-size:13px;color:${C.muted};cursor:pointer;transition:all .15s;font-family:'Plus Jakarta Sans',sans-serif}
+ .auth-seg-btn.active{background:${C.cyan};color:#fff;box-shadow:0 3px 10px rgba(0,180,216,.35)}
+ @media(max-width:900px){.auth-brand{display:none} .auth-mobile-brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:22px} .auth-panel{padding:32px 18px}}
+ ::-webkit-scrollbar{width:5px;height:5px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px}
  @media(max-width:768px){
   .shell{flex-direction:column}
   .sidebar{display:none}
@@ -873,28 +896,65 @@ function AuthScreen({ onLogin }) {
     setFgLoading(false);
   };
 
+  // FIX: copy shown above the form, keyed off the current mode
+  const modeCopy = {
+    login:    { title: "Welcome back",          desc: "Sign in to manage your shifts and transport." },
+    register: { title: "Create your account",   desc: "Register with your @mobitel.lk email to get started." },
+    forgot:   { title: "Reset your password",   desc: "We'll email you a verification code." },
+  }[mode];
+
   return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg,${C.deepTeal} 0%,${C.midTeal} 100%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 420 }}>
-        <div style={{ textAlign: "center", marginBottom: 26 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,.1)", borderRadius: 14, padding: "12px 20px" }}>
-            <Ico n="bus" s={26} c={C.cyan} />
-            <div style={{ textAlign: "left" }}>
-              <div style={{ color: "#fff", fontWeight: 800, fontSize: 17 }}>TransitHub</div>
-              <div style={{ color: "rgba(255,255,255,.5)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em" }}>Contact Center Transport</div>
+    <div className="auth-shell">
+      <div className="auth-brand">
+        <div className="auth-brand-inner">
+          <div className="auth-brand-logo">
+            <Ico n="bus" s={22} c={C.cyan} />
+            <div>
+              <div className="auth-brand-title">TransitHub</div>
+              <div className="auth-brand-sub">Contact Center Transport</div>
             </div>
           </div>
+          <div className="auth-headline">Keep every shift<br />moving, on time.</div>
+          <div className="auth-subtext">One place to plan your commute, request dinner and manage your roster — synced with your team leader in real time.</div>
+          <div className="auth-stats">
+            <div><div className="auth-stat-num">6</div><div className="auth-stat-lbl">Routes covered</div></div>
+            <div><div className="auth-stat-num">24/7</div><div className="auth-stat-lbl">Shift coverage</div></div>
+          </div>
         </div>
-        <div className="card">
-          {mode !== "forgot" && (
-            <div className="tab-row">
-              {[["login", "Sign In"], ["register", "Create Account"]].map(([m, lbl]) => (
-                <button key={m} className={`tab-btn${mode === m ? " active" : ""}`} onClick={() => { setMode(m); setMsg(null); }}>{lbl}</button>
-              ))}
-            </div>
-          )}
+        {/* FIX: signature element — a route line with a bus travelling along it, purely decorative */}
+        <svg className="auth-route-svg" viewBox="0 0 500 160" xmlns="http://www.w3.org/2000/svg">
+          <path id="authRoutePath" d="M-20 120 C 100 40, 200 160, 320 80 S 480 20, 540 60" stroke="rgba(255,255,255,.32)" strokeWidth="2" strokeDasharray="1 10" strokeLinecap="round" fill="none" />
+          <circle r="5" fill={C.cyan}>
+            <animateMotion dur="7s" repeatCount="indefinite" rotate="auto">
+              <mpath xlinkHref="#authRoutePath" />
+            </animateMotion>
+          </circle>
+        </svg>
+      </div>
 
-          {mode !== "forgot" && msg && <div className={`alert alert-${msg.t === "err" ? "err" : "ok"}`}>{msg.m}</div>}
+      <div className="auth-panel">
+        <div className="auth-card">
+          <div className="auth-mobile-brand">
+            <Ico n="bus" s={22} c={C.cyan} />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: C.deepTeal }}>TransitHub</div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: ".08em" }}>Contact Center Transport</div>
+            </div>
+          </div>
+
+          <div className="auth-form-wrap">
+            <div className="auth-title">{modeCopy.title}</div>
+            <div className="auth-desc">{modeCopy.desc}</div>
+
+            {mode !== "forgot" && (
+              <div className="auth-seg">
+                {[["login", "Sign In"], ["register", "Create Account"]].map(([m, lbl]) => (
+                  <button key={m} className={`auth-seg-btn${mode === m ? " active" : ""}`} onClick={() => { setMode(m); setMsg(null); }}>{lbl}</button>
+                ))}
+              </div>
+            )}
+
+            {mode !== "forgot" && msg && <div className={`alert alert-${msg.t === "err" ? "err" : "ok"}`}>{msg.m}</div>}
 
           {mode === "login" && (
             <div className="stack-sm">
@@ -1006,6 +1066,7 @@ function AuthScreen({ onLogin }) {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>
@@ -3130,6 +3191,9 @@ function AdminDashboard({ user, onLogout }) {
   const [resetPwMsg,    setResetPwMsg]    = useState(null);
   // FIX: track admin's own user state so roster/profile updates persist in session
   const [adminUser,    setAdminUser]   = useState(user);
+  // FIX: Apply/My Roster/My Profile are folded into one "My Transport" sidebar
+  // entry — this tracks which of the three sub-views is showing inside it.
+  const [myTransportTab, setMyTransportTab] = useState("apply");
 
   useEffect(() => { DB.getApps().then(data => { setApps(data); setLoadingApps(false); }); }, []);
   useEffect(() => { if (tab === "apps" || tab === "routes") DB.getApps().then(setApps); }, [tab]);
@@ -3232,16 +3296,21 @@ function AdminDashboard({ user, onLogout }) {
   );
 
   const isSuperAdmin = user?.empId === "ADMIN";
+  // FIX: "apply"/"roster"/"profile" no longer appear as separate top-level
+  // tabs — they live inside the single "mytransport" tab's sub-nav instead,
+  // so the sidebar isn't listing personal actions alongside admin actions.
   const TABS = [
-    ["apply",     "Apply",          "bus"     ],
-    ["roster",    "My Roster",      "cal"     ],
-    ["profile",   "My Profile",     "user"    ],
     ["apps",      "Applications",   "form"    ],
     ["routes",    "Route View",     "route"   ],
     ["dinner",    "Dinner",         "dinner"  ],
     ["import",    "Import Roster",  "upload"  ],
     ["employees", "Employees",      "team"    ],
     ["settings",  "Settings",       "settings"],
+  ];
+  const MY_TRANSPORT_SUBTABS = [
+    ["apply",   "Apply",      "bus" ],
+    ["roster",  "My Roster",  "cal" ],
+    ["profile", "My Profile", "user"],
   ];
 
   return (
@@ -3260,15 +3329,15 @@ function AdminDashboard({ user, onLogout }) {
         </div>
         <div className="sb-div" />
         <div className="sb-nav">
-          <div style={{ fontSize: 9, fontWeight: 800, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".08em", padding: "6px 12px 2px" }}>My Transport</div>
-          {TABS.filter(([id]) => ["apply","roster","profile"].includes(id)).map(([id, lbl, icon]) => (
-            <button key={id} className={`sb-item${tab === id ? " active" : ""}`} onClick={() => setTab(id)}>
-              <Ico n={icon} s={15} />{lbl}
-            </button>
-          ))}
+          {/* FIX: single entry for the admin's own transport/roster/profile,
+              instead of three separate sidebar buttons duplicating the
+              employee nav alongside the admin tabs below. */}
+          <button className={`sb-item${tab === "mytransport" ? " active" : ""}`} onClick={() => setTab("mytransport")}>
+            <Ico n="bus" s={15} />My Transport
+          </button>
           <div style={{ height: 1, background: "rgba(255,255,255,.08)", margin: "6px 0" }} />
           <div style={{ fontSize: 9, fontWeight: 800, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".08em", padding: "4px 12px 2px" }}>Admin</div>
-          {TABS.filter(([id]) => ["apps","routes","dinner","import","employees","settings"].includes(id)).map(([id, lbl, icon]) => (
+          {TABS.map(([id, lbl, icon]) => (
             <button key={id} className={`sb-item${tab === id ? " active" : ""}`} onClick={() => setTab(id)}>
               <Ico n={icon} s={15} />{lbl}
             </button>
@@ -3281,10 +3350,31 @@ function AdminDashboard({ user, onLogout }) {
         </div>
       </div>
       <div className="main-area">
-        {/* FIX: pass adminUser state and updater so roster/profile changes persist */}
-        {tab === "apply"   && <TransportForm user={adminUser} />}
-        {tab === "roster"  && <RosterPage user={adminUser} onUserUpdate={setAdminUser} />}
-        {tab === "profile" && <ProfilePage user={adminUser} onUpdate={setAdminUser} />}
+        {/* FIX: pass adminUser state and updater so roster/profile changes persist.
+            Apply/Roster/Profile now share one "mytransport" tab with a small
+            sub-nav instead of three separate top-level sidebar entries. */}
+        {tab === "mytransport" && (
+          <div className="stack">
+            <div>
+              <div className="page-title">My Transport</div>
+              <div className="page-sub">Your own transport requests, roster and profile — same as any employee.</div>
+            </div>
+            <div className="tab-row">
+              {MY_TRANSPORT_SUBTABS.map(([id, lbl, icon]) => (
+                <button
+                  key={id}
+                  className={`tab-btn${myTransportTab === id ? " active" : ""}`}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                  onClick={() => setMyTransportTab(id)}>
+                  <Ico n={icon} s={13} />{lbl}
+                </button>
+              ))}
+            </div>
+            {myTransportTab === "apply"   && <TransportForm user={adminUser} />}
+            {myTransportTab === "roster"  && <RosterPage user={adminUser} onUserUpdate={setAdminUser} />}
+            {myTransportTab === "profile" && <ProfilePage user={adminUser} onUpdate={setAdminUser} />}
+          </div>
+        )}
         {tab === "dinner"  && <AdminDinnerView apps={apps} setApps={setApps} user={adminUser} />}
         {tab === "import"  && <AdminRosterImport />}
         {tab === "routes"  && <AdminRouteView apps={apps} user={adminUser} />}
