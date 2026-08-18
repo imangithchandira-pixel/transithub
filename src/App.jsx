@@ -3191,9 +3191,6 @@ function AdminDashboard({ user, onLogout }) {
   const [resetPwMsg,    setResetPwMsg]    = useState(null);
   // FIX: track admin's own user state so roster/profile updates persist in session
   const [adminUser,    setAdminUser]   = useState(user);
-  // FIX: Apply/My Roster/My Profile are folded into one "My Transport" sidebar
-  // entry — this tracks which of the three sub-views is showing inside it.
-  const [myTransportTab, setMyTransportTab] = useState("apply");
 
   useEffect(() => { DB.getApps().then(data => { setApps(data); setLoadingApps(false); }); }, []);
   useEffect(() => { if (tab === "apps" || tab === "routes") DB.getApps().then(setApps); }, [tab]);
@@ -3296,21 +3293,16 @@ function AdminDashboard({ user, onLogout }) {
   );
 
   const isSuperAdmin = user?.empId === "ADMIN";
-  // FIX: "apply"/"roster"/"profile" no longer appear as separate top-level
-  // tabs — they live inside the single "mytransport" tab's sub-nav instead,
-  // so the sidebar isn't listing personal actions alongside admin actions.
   const TABS = [
+    ["apply",     "Apply",          "bus"     ],
+    ["roster",    "My Roster",      "cal"     ],
+    ["profile",   "My Profile",     "user"    ],
     ["apps",      "Applications",   "form"    ],
     ["routes",    "Route View",     "route"   ],
     ["dinner",    "Dinner",         "dinner"  ],
     ["import",    "Import Roster",  "upload"  ],
     ["employees", "Employees",      "team"    ],
     ["settings",  "Settings",       "settings"],
-  ];
-  const MY_TRANSPORT_SUBTABS = [
-    ["apply",   "Apply",      "bus" ],
-    ["roster",  "My Roster",  "cal" ],
-    ["profile", "My Profile", "user"],
   ];
 
   return (
@@ -3329,15 +3321,15 @@ function AdminDashboard({ user, onLogout }) {
         </div>
         <div className="sb-div" />
         <div className="sb-nav">
-          {/* FIX: single entry for the admin's own transport/roster/profile,
-              instead of three separate sidebar buttons duplicating the
-              employee nav alongside the admin tabs below. */}
-          <button className={`sb-item${tab === "mytransport" ? " active" : ""}`} onClick={() => setTab("mytransport")}>
-            <Ico n="bus" s={15} />My Transport
-          </button>
+          <div style={{ fontSize: 9, fontWeight: 800, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".08em", padding: "6px 12px 2px" }}>My Transport</div>
+          {TABS.filter(([id]) => ["apply","roster","profile"].includes(id)).map(([id, lbl, icon]) => (
+            <button key={id} className={`sb-item${tab === id ? " active" : ""}`} onClick={() => setTab(id)}>
+              <Ico n={icon} s={15} />{lbl}
+            </button>
+          ))}
           <div style={{ height: 1, background: "rgba(255,255,255,.08)", margin: "6px 0" }} />
           <div style={{ fontSize: 9, fontWeight: 800, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".08em", padding: "4px 12px 2px" }}>Admin</div>
-          {TABS.map(([id, lbl, icon]) => (
+          {TABS.filter(([id]) => ["apps","routes","dinner","import","employees","settings"].includes(id)).map(([id, lbl, icon]) => (
             <button key={id} className={`sb-item${tab === id ? " active" : ""}`} onClick={() => setTab(id)}>
               <Ico n={icon} s={15} />{lbl}
             </button>
@@ -3350,31 +3342,10 @@ function AdminDashboard({ user, onLogout }) {
         </div>
       </div>
       <div className="main-area">
-        {/* FIX: pass adminUser state and updater so roster/profile changes persist.
-            Apply/Roster/Profile now share one "mytransport" tab with a small
-            sub-nav instead of three separate top-level sidebar entries. */}
-        {tab === "mytransport" && (
-          <div className="stack">
-            <div>
-              <div className="page-title">My Transport</div>
-              <div className="page-sub">Your own transport requests, roster and profile — same as any employee.</div>
-            </div>
-            <div className="tab-row">
-              {MY_TRANSPORT_SUBTABS.map(([id, lbl, icon]) => (
-                <button
-                  key={id}
-                  className={`tab-btn${myTransportTab === id ? " active" : ""}`}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-                  onClick={() => setMyTransportTab(id)}>
-                  <Ico n={icon} s={13} />{lbl}
-                </button>
-              ))}
-            </div>
-            {myTransportTab === "apply"   && <TransportForm user={adminUser} />}
-            {myTransportTab === "roster"  && <RosterPage user={adminUser} onUserUpdate={setAdminUser} />}
-            {myTransportTab === "profile" && <ProfilePage user={adminUser} onUpdate={setAdminUser} />}
-          </div>
-        )}
+        {/* FIX: pass adminUser state and updater so roster/profile changes persist */}
+        {tab === "apply"   && <TransportForm user={adminUser} />}
+        {tab === "roster"  && <RosterPage user={adminUser} onUserUpdate={setAdminUser} />}
+        {tab === "profile" && <ProfilePage user={adminUser} onUpdate={setAdminUser} />}
         {tab === "dinner"  && <AdminDinnerView apps={apps} setApps={setApps} user={adminUser} />}
         {tab === "import"  && <AdminRosterImport />}
         {tab === "routes"  && <AdminRouteView apps={apps} user={adminUser} />}
@@ -3794,8 +3765,7 @@ const MOBILE_NAV = [
 
 const MOBILE_TITLES = {
   home: "TransitHub",
-  apply: "Submit Transport",
-  dinner: "Submit Dinner",
+  apply: "Transport & Dinner",
   roster: "My Roster",
   profile: "My Profile",
 };
@@ -3837,7 +3807,6 @@ function MobileEmployeeShell({ user: initUser, onLogout }) {
       <div className="m-content">
         {screen === "home" && <MobileHome user={user} setScreen={setScreen} />}
         {screen === "apply" && <MobileTransportForm user={user} onDone={() => setScreen("home")} />}
-        {screen === "dinner" && <MobileDinnerForm user={user} onDone={() => setScreen("home")} />}
         {screen === "roster" && <MobileRoster user={user} onUserUpdate={setUser} />}
         {screen === "profile" && <MobileProfile user={user} onUpdate={setUser} onLogout={onLogout} />}
       </div>
@@ -3866,29 +3835,16 @@ function MobileHome({ user, setScreen }) {
     DB.getUserApps(user.id).then(a => { setApps(a); setLoading(false); });
   }, [user.id]);
 
-  const QUICK = [
-    { id: "apply", label: "Submit Transport", sub: "Pick or Drop request", icon: "🚌", bg: C.cyan },
-    { id: "dinner", label: "Submit Dinner", sub: "Order tonight's meal", icon: "🍽", bg: C.purple },
-    { id: "roster", label: "My Roster", sub: "Upload & view shifts", icon: "📅", bg: C.midTeal },
-    { id: "profile", label: "My Profile", sub: "Addresses & password", icon: "👤", bg: C.deepTeal },
-  ];
-
   return (
     <div>
       <div style={{ padding: "0 16px 4px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {QUICK.map(q => (
-            <button
-              key={q.id}
-              className="m-big-btn"
-              style={{ background: q.bg, color: "#fff" }}
-              onClick={() => setScreen(q.id)}>
-              <span style={{ fontSize: 30 }}>{q.icon}</span>
-              <span>{q.label}</span>
-              <span style={{ fontSize: 11, fontWeight: 500, opacity: .85 }}>{q.sub}</span>
-            </button>
-          ))}
-        </div>
+        <button
+          className="m-big-btn"
+          style={{ background: C.cyan, color: "#fff", flexDirection: "row", justifyContent: "center", gap: 10, padding: 18 }}
+          onClick={() => setScreen("apply")}>
+          <Ico n="bus" s={22} c="#fff" />
+          <span>New Transport / Dinner Request</span>
+        </button>
       </div>
 
       <div className="m-section-title">My Submissions</div>
@@ -3897,7 +3853,7 @@ function MobileHome({ user, setScreen }) {
           <div className="m-card-pad" style={{ textAlign: "center", color: C.muted }}>Loading…</div>
         ) : apps.length === 0 ? (
           <div className="m-card-pad" style={{ textAlign: "center", color: C.muted }}>
-            No submissions yet — tap Submit Transport or Submit Dinner above to get started.
+            No submissions yet — tap the button above to get started.
           </div>
         ) : (
           <div>
@@ -3929,7 +3885,9 @@ function MobileHome({ user, setScreen }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// SUBMIT TRANSPORT — same validation/cutoff/dedupe rules as desktop TransportForm
+// APPLY — Transport + Dinner together, mirroring the desktop TransportForm's
+// Auto-fill / Manual / Dinner Only mode toggle, cutoff rules, and dedupe
+// checks exactly — just re-skinned with big mobile touch targets.
 // ════════════════════════════════════════════════════════════════════════════
 function MobileTransportForm({ user, onDone }) {
   const [lu, setLu] = useState(user);
@@ -3943,37 +3901,30 @@ function MobileTransportForm({ user, onDone }) {
     DB.getCutoffEnabled().then(setCutoffEnabled);
     DB.getCutoffTimes().then(setCutoffTimes);
   }, []);
-  const isAdmin = user.role === "admin"; // always false here, kept for parity with desktop logic
 
+  const [mode, setMode] = useState("auto"); // auto | manual | dinner
+  const [selYear, setSelYear] = useState(nowYear());
+  const [selMonth, setSelMonth] = useState(nowMonth());
+  const [selDate, setSelDate] = useState(null);
+  const [autoFields, setAutoFields] = useState({});
+  const [selAddr, setSelAddr] = useState(null);
   const [form, setForm] = useState({
     date: "", phone: user.phone || "", shift: "", pickDrop: "",
     address: "", mapsLink: "", route: "", wantsDinner: null, dinnerMeal: "",
   });
-  const [selAddr, setSelAddr] = useState(null);
-  const [autoFields, setAutoFields] = useState({});
   const [msg, setMsg] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [submittedForm, setSubmittedForm] = useState(null);
   const [dayUsage, setDayUsage] = useState({ hasPick: false, hasDrop: false, hasDinner: false });
-  const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(null);
 
   const rosterData = lu.rosterData || {};
+  const monthKey = `${selYear}-${String(selMonth).padStart(2, "0")}`;
+  const rosterMonth = rosterData[monthKey] || {};
 
   const set = (k, v) => {
     setForm(p => ({ ...p, [k]: v }));
     setAutoFields(p => ({ ...p, [k]: false }));
   };
-
-  // Auto-fill shift from roster when a date is picked, same as desktop auto mode
-  useEffect(() => {
-    if (!form.date) return;
-    const monthKey = form.date.slice(0, 7);
-    const entry = (rosterData[monthKey] || {})[form.date];
-    if (entry?.shiftInfo && !entry.shiftInfo.off && entry.shiftInfo.label) {
-      setForm(p => ({ ...p, shift: entry.shiftInfo.label }));
-      setAutoFields(p => ({ ...p, shift: true }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.date]);
 
   useEffect(() => {
     if (!form.date) { setDayUsage({ hasPick: false, hasDrop: false, hasDinner: false }); return; }
@@ -3987,6 +3938,35 @@ function MobileTransportForm({ user, onDone }) {
     });
   }, [form.date, user.id]);
 
+  const switchMode = (m) => {
+    setMode(m); setMsg(null);
+    setSelDate(null); setAutoFields({});
+    setForm({ date: "", phone: lu.phone || "", shift: "", pickDrop: "", address: "", mapsLink: "", route: "", wantsDinner: null, dinnerMeal: "" });
+  };
+
+  const pickDate = (dateStr, entry) => {
+    if (entry?.shiftInfo?.off) {
+      setMsg({ t: "err", m: `${dateStr} is a day off — no transport needed.` });
+      return;
+    }
+    setMsg(null);
+    setSelDate(dateStr);
+    const addr = lu.addresses?.[selAddr ?? 0];
+    const newAuto = { date: true };
+    const newForm = { ...form, date: dateStr };
+    if (entry?.shiftInfo?.label) { newForm.shift = entry.shiftInfo.label; newAuto.shift = true; }
+    if (addr) {
+      newForm.address = `${addr.street}, ${addr.city}${addr.district ? ", " + addr.district : ""}${addr.zip ? " " + addr.zip : ""}`;
+      newForm.mapsLink = addr.mapsLink || "";
+      newForm.route = addr.route || "";
+      newAuto.address = true;
+      if (addr.mapsLink) newAuto.mapsLink = true;
+      if (addr.route) newAuto.route = true;
+    }
+    setAutoFields(newAuto);
+    setForm(newForm);
+  };
+
   const pickAddress = (addr, i) => {
     setSelAddr(i);
     setForm(p => ({
@@ -3998,76 +3978,100 @@ function MobileTransportForm({ user, onDone }) {
     setAutoFields(p => ({ ...p, address: true, mapsLink: !!addr.mapsLink, route: !!addr.route }));
   };
 
-  const cutoff = (cutoffEnabled && !isAdmin && form.date && form.shift)
-    ? checkSubmissionCutoff(form.date, form.shift, cutoffTimes)
-    : { blocked: false, deadline: null };
-
-  const dinnerMode = getDinnerMode(form.shift);
-
-  const submit = async () => {
-    if (!form.date) return setMsg({ t: "err", m: "Please pick a date." });
-    if (!form.phone) return setMsg({ t: "err", m: "Contact number is required." });
-    if (!form.shift) return setMsg({ t: "err", m: "Please select a shift." });
-    if (cutoffEnabled && !isAdmin) {
-      const c = checkSubmissionCutoff(form.date, form.shift, cutoffTimes);
-      if (c.blocked) return setMsg({ t: "err", m: "⏰ " + c.reason });
-    }
-    if (!form.pickDrop) return setMsg({ t: "err", m: "Select Pick or Drop." });
-    if (!form.address) return setMsg({ t: "err", m: "Address is required." });
-    if (!form.route) return setMsg({ t: "err", m: "Route is required." });
-    if (dinnerMode !== "none") {
-      if (form.wantsDinner === null) return setMsg({ t: "err", m: "Please confirm your dinner preference." });
-      if (form.wantsDinner === true && !form.dinnerMeal) return setMsg({ t: "err", m: "Select a meal, or choose No dinner." });
-    }
-    if (form.pickDrop === "PICK" && dayUsage.hasPick) return setMsg({ t: "err", m: "Already submitted a PICK for this date." });
-    if (form.pickDrop === "DROP" && dayUsage.hasDrop) return setMsg({ t: "err", m: "Already submitted a DROP for this date." });
-    if (form.wantsDinner === true && dayUsage.hasDinner) return setMsg({ t: "err", m: "Already submitted a dinner request for this date." });
-
-    setSubmitting(true);
-    const app = {
-      id: uid(), userId: user.id, empId: user.empId, empName: user.name,
-      date: form.date, phone: form.phone, shift: form.shift, pickDrop: form.pickDrop,
-      address: form.address, mapsLink: form.mapsLink, route: form.route,
-      wantsDinner: form.wantsDinner === true,
-      dinnerMeal: form.wantsDinner === true ? form.dinnerMeal : "",
-      entryMode: "mobile", submittedAt: new Date().toISOString(),
-    };
-    try {
-      await DB.createApp(app);
-      DB.touchActivity(user.id);
-      setDone(app);
-    } catch (e) {
-      setMsg({ t: "err", m: "Failed: " + e.message });
-    }
-    setSubmitting(false);
+  const handlePickDrop = (val) => {
+    if (val === "PICK" && dayUsage.hasPick) { setMsg({ t: "err", m: "You already have a PICK request for this date." }); return; }
+    if (val === "DROP" && dayUsage.hasDrop) { setMsg({ t: "err", m: "You already have a DROP request for this date." }); return; }
+    setMsg(null);
+    set("pickDrop", val);
   };
 
-  if (done) return (
+  const submit = async () => {
+    if (!form.date) return setMsg({ t: "err", m: "Date is required." });
+    if (!form.phone) return setMsg({ t: "err", m: "Contact number is required." });
+    if (!form.shift) return setMsg({ t: "err", m: "Shift is required." });
+    if (cutoffEnabled) {
+      const { blocked, reason } = checkSubmissionCutoff(form.date, form.shift, cutoffTimes);
+      if (blocked) return setMsg({ t: "err", m: `⏰ Submission closed — ${reason}` });
+    }
+    const isDinnerOnly = mode === "dinner";
+    if (isDinnerOnly) {
+      if (getDinnerMode(form.shift) === "none")
+        return setMsg({ t: "err", m: "Dinner is not available for this shift." });
+      if (!form.dinnerMeal) return setMsg({ t: "err", m: "Please select a meal." });
+      if (dayUsage.hasDinner) return setMsg({ t: "err", m: "Already submitted a dinner request for this date." });
+    } else {
+      if (!form.pickDrop) return setMsg({ t: "err", m: "Select Pick or Drop." });
+      if (!form.address) return setMsg({ t: "err", m: "Address is required." });
+      if (!form.route) return setMsg({ t: "err", m: "Route is required." });
+      const dinnerMode = getDinnerMode(form.shift);
+      if (dinnerMode !== "none") {
+        if (form.wantsDinner === null) return setMsg({ t: "err", m: "Please confirm your dinner preference — select Yes and choose a meal, or No dinner today." });
+        if (form.wantsDinner === true && !form.dinnerMeal) return setMsg({ t: "err", m: "Please select a meal, or choose No dinner today." });
+      }
+      if (form.pickDrop === "PICK" && dayUsage.hasPick) return setMsg({ t: "err", m: "Already submitted a PICK for this date." });
+      if (form.pickDrop === "DROP" && dayUsage.hasDrop) return setMsg({ t: "err", m: "Already submitted a DROP for this date." });
+      if (form.wantsDinner === true && dayUsage.hasDinner) return setMsg({ t: "err", m: "Already submitted a dinner request for this date." });
+    }
+    const app = {
+      id: uid(), userId: user.id, empId: user.empId, empName: user.name,
+      date: form.date, phone: form.phone, shift: form.shift,
+      pickDrop: isDinnerOnly ? "DINNER_ONLY" : form.pickDrop,
+      address: isDinnerOnly ? "" : form.address,
+      mapsLink: isDinnerOnly ? "" : form.mapsLink,
+      route: isDinnerOnly ? "" : form.route,
+      wantsDinner: isDinnerOnly ? true : (form.wantsDinner === true),
+      dinnerMeal: isDinnerOnly ? form.dinnerMeal : (form.wantsDinner === true ? form.dinnerMeal : ""),
+      entryMode: mode, submittedAt: new Date().toISOString(),
+    };
+    await DB.createApp(app);
+    DB.touchActivity(user.id);
+    setSubmittedForm({ ...form, isDinnerOnly });
+    setSubmitted(true);
+    setMsg(null);
+  };
+
+  const reset = () => {
+    setSelDate(null); setSelAddr(null); setAutoFields({});
+    setForm({ date: "", phone: lu.phone || "", shift: "", pickDrop: "", address: "", mapsLink: "", route: "", wantsDinner: null, dinnerMeal: "" });
+    setSubmitted(false); setSubmittedForm(null); setMsg(null);
+  };
+
+  if (submitted && submittedForm) return (
     <div className="m-card">
       <div className="m-card-pad" style={{ textAlign: "center" }}>
         <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.greenLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
           <Ico n="check" s={28} c={C.green} />
         </div>
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>Request Submitted!</div>
-        <div style={{ color: C.muted, fontSize: 13, marginBottom: 18 }}>
-          {done.date} · {done.shift} · {done.pickDrop}
+        <div style={{ color: C.muted, fontSize: 13, marginBottom: 6 }}>
+          {submittedForm.isDinnerOnly
+            ? <span>Dinner only for <b>{submittedForm.date}</b> · <b>{submittedForm.shift}</b></span>
+            : <span><b>{submittedForm.date}</b> · <b>{submittedForm.shift}</b> · <b>{submittedForm.pickDrop}</b></span>}
         </div>
-        <button className="m-submit-btn" onClick={onDone}>Back to Home</button>
+        {(submittedForm.wantsDinner || submittedForm.isDinnerOnly) && submittedForm.dinnerMeal && (
+          <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>🍽 Dinner: <b style={{ color: C.text }}>{submittedForm.dinnerMeal}</b></div>
+        )}
+        <button className="m-submit-btn" style={{ margin: "18px 0 0" }} onClick={() => { reset(); onDone(); }}>Back to Home</button>
+        <div style={{ marginTop: 12 }}>
+          <button onClick={reset} style={{ background: "none", border: "none", color: C.cyan, fontWeight: 700, fontSize: 13 }}>Submit Another</button>
+        </div>
       </div>
     </div>
   );
 
-  return (
-    <div>
-      {msg && <div className={`m-alert m-alert-${msg.t === "err" ? "err" : "ok"}`}>{msg.m}</div>}
+  const cutoff = (cutoffEnabled && form.date && form.shift)
+    ? checkSubmissionCutoff(form.date, form.shift, cutoffTimes)
+    : { blocked: false, deadline: null };
 
+  const dinnerMode = getDinnerMode(form.shift);
+
+  // Shared field set for Auto and Manual modes — identical to the desktop
+  // TransportForm's FormFields, just re-skinned with m-* mobile classes.
+  const Fields = () => (
+    <>
       <div className="m-card"><div className="m-card-pad">
-        <label className="m-label">
-          Date{autoFields.date && <span className="m-badge" style={{ marginLeft: 8, background: C.cyanLight, color: C.midTeal }}>AUTO</span>}
-        </label>
-        <input
-          className={`m-input${autoFields.date ? " m-input-auto" : ""}`}
-          type="date" value={form.date} onChange={e => set("date", e.target.value)} />
+        <label className="m-label">Date{autoFields.date && <span className="m-badge" style={{ marginLeft: 8, background: C.cyanLight, color: C.midTeal }}>AUTO</span>}</label>
+        <input className={`m-input${autoFields.date ? " m-input-auto" : ""}`} type="date" value={form.date} onChange={e => set("date", e.target.value)} />
       </div></div>
 
       <div className="m-card"><div className="m-card-pad">
@@ -4076,20 +4080,14 @@ function MobileTransportForm({ user, onDone }) {
       </div></div>
 
       <div className="m-card"><div className="m-card-pad">
-        <label className="m-label">
-          Shift{autoFields.shift && <span className="m-badge" style={{ marginLeft: 8, background: C.cyanLight, color: C.midTeal }}>from roster</span>}
-        </label>
+        <label className="m-label">Shift{autoFields.shift && <span className="m-badge" style={{ marginLeft: 8, background: C.cyanLight, color: C.midTeal }}>from roster</span>}</label>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {SHIFT_LABELS.map(opt => {
             const on = form.shift === opt;
             const info = Object.values(SHIFT_MAP).find(s => s.label === opt);
             return (
               <div key={opt} className={`m-option${on ? " sel" : ""}`} onClick={() => set("shift", opt)}>
-                {info && (
-                  <div className="m-option-icon" style={{ background: info.bg }}>
-                    <div style={{ width: 12, height: 12, borderRadius: "50%", background: info.color }} />
-                  </div>
-                )}
+                {info && <div className="m-option-icon" style={{ background: info.bg }}><div style={{ width: 12, height: 12, borderRadius: "50%", background: info.color }} /></div>}
                 <div className="m-option-text">{opt}</div>
               </div>
             );
@@ -4101,10 +4099,7 @@ function MobileTransportForm({ user, onDone }) {
         <label className="m-label">Transport Type</label>
         {(dayUsage.hasPick || dayUsage.hasDrop) && (
           <div className="m-alert m-alert-info" style={{ margin: "0 0 10px" }}>
-            {dayUsage.hasPick && dayUsage.hasDrop
-              ? "Both PICK and DROP already submitted for this date."
-              : dayUsage.hasPick ? "PICK submitted — you can still add a DROP."
-              : "DROP submitted — you can still add a PICK."}
+            {dayUsage.hasPick && dayUsage.hasDrop ? "Both PICK and DROP already submitted." : dayUsage.hasPick ? "PICK submitted — you can still add a DROP." : "DROP submitted — you can still add a PICK."}
           </div>
         )}
         <div style={{ display: "flex", gap: 10 }}>
@@ -4112,15 +4107,8 @@ function MobileTransportForm({ user, onDone }) {
             const on = form.pickDrop === opt;
             const disabled = (opt === "PICK" && dayUsage.hasPick) || (opt === "DROP" && dayUsage.hasDrop);
             return (
-              <button
-                key={opt}
-                disabled={disabled}
-                onClick={() => set("pickDrop", opt)}
-                style={{
-                  flex: 1, minHeight: 52, borderRadius: 14, cursor: disabled ? "not-allowed" : "pointer",
-                  border: `2px solid ${on ? col : C.grey1}`, background: on ? bg : "#fff",
-                  fontWeight: 800, fontSize: 15, color: on ? col : C.text, opacity: disabled ? .4 : 1,
-                }}>
+              <button key={opt} disabled={disabled} onClick={() => handlePickDrop(opt)}
+                style={{ flex: 1, minHeight: 52, borderRadius: 14, cursor: disabled ? "not-allowed" : "pointer", border: `2px solid ${on ? col : C.grey1}`, background: on ? bg : "#fff", fontWeight: 800, fontSize: 15, color: on ? col : C.text, opacity: disabled ? .4 : 1 }}>
                 {opt}
               </button>
             );
@@ -4129,25 +4117,18 @@ function MobileTransportForm({ user, onDone }) {
       </div></div>
 
       <div className="m-card"><div className="m-card-pad">
-        <label className="m-label">
-          Address{autoFields.address && <span className="m-badge" style={{ marginLeft: 8, background: C.cyanLight, color: C.midTeal }}>AUTO</span>}
-        </label>
+        <label className="m-label">Address{autoFields.address && <span className="m-badge" style={{ marginLeft: 8, background: C.cyanLight, color: C.midTeal }}>AUTO</span>}</label>
         {lu.addresses?.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
             {lu.addresses.map((addr, i) => (
               <div key={addr.id} className={`m-option${selAddr === i ? " sel" : ""}`} onClick={() => pickAddress(addr, i)}>
                 <div className="m-option-icon" style={{ background: C.cyanLight }}><Ico n="pin" s={18} c={C.cyan} /></div>
-                <div>
-                  <div className="m-option-text">{addr.label}</div>
-                  <div className="m-option-sub">{addr.street}, {addr.city}</div>
-                </div>
+                <div><div className="m-option-text">{addr.label}</div><div className="m-option-sub">{addr.street}, {addr.city}</div></div>
               </div>
             ))}
           </div>
         )}
-        <textarea
-          className="m-input" rows={2} placeholder="Full pickup/drop address"
-          value={form.address} onChange={e => set("address", e.target.value)} style={{ resize: "vertical" }} />
+        <textarea className="m-input" rows={2} placeholder="Full pickup/drop address" value={form.address} onChange={e => set("address", e.target.value)} style={{ resize: "vertical" }} />
         {form.route ? (
           <div className="route-badge" style={{ marginTop: 8 }}><Ico n="route" s={12} c={C.midTeal} />{form.route}</div>
         ) : (
@@ -4168,9 +4149,7 @@ function MobileTransportForm({ user, onDone }) {
             {[[true, "Yes, dinner"], [false, "No dinner"]].map(([val, lbl]) => {
               const on = form.wantsDinner === val;
               return (
-                <button
-                  key={String(val)}
-                  onClick={() => setForm(p => ({ ...p, wantsDinner: val, dinnerMeal: val ? p.dinnerMeal : "" }))}
+                <button key={String(val)} onClick={() => setForm(p => ({ ...p, wantsDinner: val, dinnerMeal: val ? p.dinnerMeal : "" }))}
                   style={{ flex: 1, minHeight: 48, borderRadius: 12, border: `2px solid ${on ? C.purple : C.grey1}`, background: on ? C.purpleLight : "#fff", fontWeight: 700, color: on ? C.purple : C.text }}>
                   {lbl}
                 </button>
@@ -4183,10 +4162,7 @@ function MobileTransportForm({ user, onDone }) {
                 const on = form.dinnerMeal === meal;
                 const emoji = { Chicken: "🍗", Vegetable: "🥦", Fish: "🐟", Egg: "🥚" }[meal];
                 return (
-                  <div
-                    key={meal} className={`m-option${on ? " sel" : ""}`}
-                    style={{ flexDirection: "column", textAlign: "center", gap: 6 }}
-                    onClick={() => setForm(p => ({ ...p, dinnerMeal: meal }))}>
+                  <div key={meal} className={`m-option${on ? " sel" : ""}`} style={{ flexDirection: "column", textAlign: "center", gap: 6 }} onClick={() => setForm(p => ({ ...p, dinnerMeal: meal }))}>
                     <span style={{ fontSize: 24 }}>{emoji}</span>
                     <div className="m-option-text">{meal}</div>
                   </div>
@@ -4200,129 +4176,115 @@ function MobileTransportForm({ user, onDone }) {
       {cutoff.blocked && <div className="m-alert m-alert-err">⏰ {cutoff.reason}</div>}
       {!cutoff.blocked && cutoff.deadline && <div className="m-alert m-alert-warn">⏰ Deadline: {cutoff.deadline}</div>}
 
-      <button className="m-submit-btn" disabled={submitting || cutoff.blocked} onClick={submit}>
-        {submitting ? "Submitting…" : "Submit Request"}
-      </button>
+      <button className="m-submit-btn" disabled={cutoff.blocked} onClick={submit}>Submit Request</button>
       <div style={{ height: 20 }} />
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// SUBMIT DINNER — dinner-only, same dedupe rule as desktop
-// ════════════════════════════════════════════════════════════════════════════
-function MobileDinnerForm({ user, onDone }) {
-  const [form, setForm] = useState({ date: "", phone: user.phone || "", shift: "", dinnerMeal: "" });
-  const [msg, setMsg] = useState(null);
-  const [dayUsage, setDayUsage] = useState({ hasDinner: false });
-  const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(null);
-
-  useEffect(() => {
-    if (!form.date) { setDayUsage({ hasDinner: false }); return; }
-    DB.getUserApps(user.id).then(apps => {
-      setDayUsage({ hasDinner: apps.some(a => a.date === form.date && a.dinnerMeal) });
-    });
-  }, [form.date, user.id]);
-
-  const submit = async () => {
-    if (!form.date) return setMsg({ t: "err", m: "Please pick a date." });
-    if (!form.phone) return setMsg({ t: "err", m: "Contact number is required." });
-    if (!form.shift) return setMsg({ t: "err", m: "Please select a shift." });
-    if (!form.dinnerMeal) return setMsg({ t: "err", m: "Please select a meal." });
-    if (dayUsage.hasDinner) return setMsg({ t: "err", m: "Already submitted a dinner request for this date." });
-    setSubmitting(true);
-    const app = {
-      id: uid(), userId: user.id, empId: user.empId, empName: user.name,
-      date: form.date, phone: form.phone, shift: form.shift,
-      pickDrop: "DINNER_ONLY", address: "", mapsLink: "", route: "",
-      wantsDinner: true, dinnerMeal: form.dinnerMeal,
-      entryMode: "mobile", submittedAt: new Date().toISOString(),
-    };
-    try {
-      await DB.createApp(app);
-      DB.touchActivity(user.id);
-      setDone(app);
-    } catch (e) {
-      setMsg({ t: "err", m: "Failed: " + e.message });
-    }
-    setSubmitting(false);
-  };
-
-  if (done) return (
-    <div className="m-card">
-      <div className="m-card-pad" style={{ textAlign: "center" }}>
-        <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.purpleLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-          <span style={{ fontSize: 26 }}>🍽</span>
-        </div>
-        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>Dinner Request Submitted!</div>
-        <div style={{ color: C.muted, fontSize: 13, marginBottom: 18 }}>{done.date} · {done.shift} · {done.dinnerMeal}</div>
-        <button className="m-submit-btn m-submit-btn-purple" onClick={onDone}>Back to Home</button>
-      </div>
-    </div>
+    </>
   );
 
   return (
     <div>
+      {/* Mode switcher — mirrors the desktop Auto-fill / Manual / Dinner Only toggle */}
+      <div style={{ display: "flex", gap: 0, background: "#fff", borderRadius: 14, padding: 4, margin: "0 16px 12px", border: `1px solid ${C.grey1}` }}>
+        {[["auto", "⚡ Auto"], ["manual", "✏️ Manual"], ["dinner", "🍽 Dinner"]].map(([m, lbl]) => (
+          <button key={m} onClick={() => switchMode(m)}
+            style={{
+              flex: 1, minHeight: 44, borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12,
+              background: mode === m ? (m === "dinner" ? C.purple : m === "manual" ? C.deepTeal : C.cyan) : "transparent",
+              color: mode === m ? "#fff" : C.muted,
+            }}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+
       {msg && <div className={`m-alert m-alert-${msg.t === "err" ? "err" : "ok"}`}>{msg.m}</div>}
 
-      <div className="m-card"><div className="m-card-pad">
-        <label className="m-label">Date</label>
-        <input className="m-input" type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
-      </div></div>
-
-      <div className="m-card"><div className="m-card-pad">
-        <label className="m-label">Contact Number</label>
-        <input className="m-input" placeholder="+94 77 000 0000" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
-      </div></div>
-
-      <div className="m-card"><div className="m-card-pad">
-        <label className="m-label">Shift (dinner-eligible only)</label>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {DINNER_SHIFTS.map(opt => {
-            const on = form.shift === opt;
-            const info = Object.values(SHIFT_MAP).find(s => s.label === opt);
-            return (
-              <div key={opt} className={`m-option${on ? " sel" : ""}`} onClick={() => setForm(p => ({ ...p, shift: opt }))}>
-                {info && (
-                  <div className="m-option-icon" style={{ background: info.bg }}>
-                    <div style={{ width: 12, height: 12, borderRadius: "50%", background: info.color }} />
-                  </div>
-                )}
-                <div className="m-option-text">{opt}</div>
-              </div>
-            );
-          })}
+      {mode === "auto" && (
+        <div className="m-alert m-alert-info"><b>Auto mode</b> — tap a working day on the calendar and the form fills in below.</div>
+      )}
+      {mode === "manual" && (
+        <div className="m-alert m-alert-warn"><b>Manual mode</b> — fill in every field yourself. Use this if your roster isn't uploaded yet.</div>
+      )}
+      {mode === "dinner" && (
+        <div style={{ margin: "0 16px 12px", padding: "12px 16px", borderRadius: 12, background: C.purpleLight, border: `1px solid ${C.purple}`, fontSize: 13, color: C.purple, fontWeight: 600 }}>
+          <b>Dinner Only</b> — no transport needed, just date, shift and meal.
         </div>
-      </div></div>
-
-      {dayUsage.hasDinner ? (
-        <div className="m-alert m-alert-info">You already have a dinner request for this date.</div>
-      ) : (
-        <div className="m-card"><div className="m-card-pad">
-          <label className="m-label">Select Meal</label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {DINNER_MEALS.map(meal => {
-              const on = form.dinnerMeal === meal;
-              const emoji = { Chicken: "🍗", Vegetable: "🥦", Fish: "🐟", Egg: "🥚" }[meal];
-              return (
-                <div
-                  key={meal} className={`m-option${on ? " sel" : ""}`}
-                  style={{ flexDirection: "column", textAlign: "center", gap: 6, minHeight: 80 }}
-                  onClick={() => setForm(p => ({ ...p, dinnerMeal: meal }))}>
-                  <span style={{ fontSize: 28 }}>{emoji}</span>
-                  <div className="m-option-text">{meal}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div></div>
       )}
 
-      <button className="m-submit-btn m-submit-btn-purple" disabled={submitting || dayUsage.hasDinner} onClick={submit}>
-        {submitting ? "Submitting…" : "Submit Dinner Request"}
-      </button>
-      <div style={{ height: 20 }} />
+      {mode === "auto" && (
+        <>
+          <div className="m-card"><div className="m-card-pad">
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <select className="m-input" value={selMonth} onChange={e => setSelMonth(Number(e.target.value))}>
+                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+              <select className="m-input" style={{ maxWidth: 100 }} value={selYear} onChange={e => setSelYear(Number(e.target.value))}>
+                {[nowYear() - 1, nowYear(), nowYear() + 1].map(y => <option key={y}>{y}</option>)}
+              </select>
+            </div>
+            {Object.keys(rosterMonth).length === 0 ? (
+              <div className="m-alert m-alert-info" style={{ margin: 0 }}>No roster for this month. Go to <b>My Roster</b> to upload it, or switch to Manual above.</div>
+            ) : (
+              <>
+                <MonthCalendar year={selYear} month={selMonth} rosterMonth={rosterMonth} onSelectDate={pickDate} selectedDate={selDate} />
+                {!selDate && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: C.muted }}>Tap a working day to auto-fill the form ↓</div>}
+              </>
+            )}
+          </div></div>
+          {selDate && <Fields />}
+        </>
+      )}
+
+      {mode === "manual" && <Fields />}
+
+      {mode === "dinner" && (
+        <>
+          <div className="m-card"><div className="m-card-pad">
+            <label className="m-label">Date</label>
+            <input className="m-input" type="date" value={form.date} onChange={e => set("date", e.target.value)} />
+          </div></div>
+          <div className="m-card"><div className="m-card-pad">
+            <label className="m-label">Contact Number</label>
+            <input className="m-input" placeholder="+94 77 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
+          </div></div>
+          <div className="m-card"><div className="m-card-pad">
+            <label className="m-label">Shift (dinner-eligible only)</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {DINNER_SHIFTS.map(opt => {
+                const on = form.shift === opt;
+                const info = Object.values(SHIFT_MAP).find(s => s.label === opt);
+                return (
+                  <div key={opt} className={`m-option${on ? " sel" : ""}`} onClick={() => set("shift", opt)}>
+                    {info && <div className="m-option-icon" style={{ background: info.bg }}><div style={{ width: 12, height: 12, borderRadius: "50%", background: info.color }} /></div>}
+                    <div className="m-option-text">{opt}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div></div>
+          {dayUsage.hasDinner ? (
+            <div className="m-alert m-alert-info">You already have a dinner request for this date.</div>
+          ) : (
+            <div className="m-card"><div className="m-card-pad">
+              <label className="m-label">Select Meal</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {DINNER_MEALS.map(meal => {
+                  const on = form.dinnerMeal === meal;
+                  const emoji = { Chicken: "🍗", Vegetable: "🥦", Fish: "🐟", Egg: "🥚" }[meal];
+                  return (
+                    <div key={meal} className={`m-option${on ? " sel" : ""}`} style={{ flexDirection: "column", textAlign: "center", gap: 6, minHeight: 80 }} onClick={() => setForm(p => ({ ...p, dinnerMeal: meal }))}>
+                      <span style={{ fontSize: 28 }}>{emoji}</span>
+                      <div className="m-option-text">{meal}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div></div>
+          )}
+          <button className="m-submit-btn m-submit-btn-purple" disabled={dayUsage.hasDinner} onClick={submit}>Submit Dinner Request</button>
+          <div style={{ height: 20 }} />
+        </>
+      )}
     </div>
   );
 }
