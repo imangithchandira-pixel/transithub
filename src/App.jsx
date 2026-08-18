@@ -428,6 +428,38 @@ const C = {
   grey0: "#F8FAFC", grey1: "#E2E8F0",
 };
 
+// ─── Desktop light/dark theme ──────────────────────────────────────────────
+// The desktop UI (sidebar-based EmployeeShell/AdminDashboard/etc.) sources
+// every neutral surface color — page bg, card bg, text, borders — from the C
+// object above, both in the CSS template and in hundreds of inline styles
+// throughout the app. So instead of threading a "theme" prop through every
+// component, dark mode works by mutating C's neutral tokens in place,
+// regenerating the stylesheet from them, and forcing one re-render — every
+// class-based AND inline-styled element picks up the new colors at once.
+// Brand/semantic tokens (cyan, red, green, orange, purple, pink, teal) are
+// left untouched in both themes.
+const DESKTOP_THEME_KEY = "th_desktop_theme";
+const LIGHT_SURFACE = {
+  ice: "#F0F9FF", white: "#FFFFFF", text: "#1E293B", muted: "#64748B",
+  border: "#CBD5E1", borderLight: "#E2E8F0", grey0: "#F8FAFC", grey1: "#E2E8F0",
+};
+const DARK_SURFACE = {
+  ice: "#000000", white: "#1C1C1E", text: "#F5F5F7", muted: "#98989D",
+  border: "#38383A", borderLight: "#38383A", grey0: "#2C2C2E", grey1: "#38383A",
+};
+const applyDesktopTheme = (theme) => {
+  Object.assign(C, theme === "dark" ? DARK_SURFACE : LIGHT_SURFACE);
+  const el = document.getElementById("th-desktop-style");
+  if (el) el.textContent = buildCSS();
+  try { localStorage.setItem(DESKTOP_THEME_KEY, theme); } catch {}
+  // Nothing subscribes to C directly, so tell the tree to re-render itself
+  // now that C's values have changed underneath it.
+  window.dispatchEvent(new Event("th-theme-changed"));
+};
+const getSavedDesktopTheme = () => {
+  try { return localStorage.getItem(DESKTOP_THEME_KEY) || "light"; } catch { return "light"; }
+};
+
 const SHIFT_MAP = {
   "06-15": { label: "6AM - 3PM",   color: C.orange, bg: C.orangeLight, ms: "6AM"  },
   "6-15":  { label: "6AM - 3PM",   color: C.orange, bg: C.orangeLight, ms: "6AM"  },
@@ -490,7 +522,10 @@ const parseOrdinal = (s) => {
 const buildDate = (y, m, d) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
-const CSS = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap'); *,*::before,*::after{box-sizing:border-box;margin:0;padding:0} html,body{font-family:'Plus Jakarta Sans',sans-serif;background:${C.ice};color:${C.text};font-size:14px} input,select,textarea,button{font-family:inherit} .shell{display:flex;min-height:100vh} .sidebar{width:232px;flex-shrink:0;background:linear-gradient(180deg,${C.deepTeal} 0%,${C.midTeal} 100%);display:flex;flex-direction:column} .main-area{flex:1;overflow-y:auto;padding:28px 30px;min-height:100vh} .sb-logo{display:flex;align-items:center;gap:10px;padding:22px 18px 14px} .sb-logo-icon{width:36px;height:36px;background:rgba(0,180,216,.22);border-radius:10px;display:flex;align-items:center;justify-content:center} .sb-logo-title{color:#fff;font-weight:800;font-size:15px} .sb-logo-sub{color:rgba(255,255,255,.45);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em} .sb-user{margin:0 10px 6px;background:rgba(255,255,255,.09);border-radius:10px;padding:10px 12px} .sb-user-name{color:#fff;font-weight:700;font-size:13px} .sb-user-id{color:rgba(255,255,255,.45);font-size:11px;margin-top:2px} .sb-div{height:1px;background:rgba(255,255,255,.08);margin:6px 0} .sb-nav{padding:0 8px;display:flex;flex-direction:column;gap:2px} .sb-item{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:9px;font-size:13px;font-weight:600;color:rgba(255,255,255,.6);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:all .15s} .sb-item:hover{background:rgba(255,255,255,.09);color:#fff} .sb-item.active{background:rgba(0,180,216,.3);color:#fff} .sb-spacer{flex:1} .sb-bottom{padding:8px 8px 16px} .card{background:${C.white};border-radius:14px;box-shadow:0 1px 12px rgba(13,61,86,.07);padding:20px} .card-0{background:${C.white};border-radius:14px;box-shadow:0 1px 12px rgba(13,61,86,.07);overflow:hidden} .page-title{font-size:20px;font-weight:800;color:${C.text};margin-bottom:3px} .page-sub{font-size:13px;color:${C.muted};margin-bottom:22px} .sec-title{font-size:14px;font-weight:700;color:${C.text};margin-bottom:14px} .label{display:block;font-size:11px;font-weight:700;color:${C.muted};text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px} .req{color:${C.red};margin-left:2px} .input{width:100%;padding:10px 13px;border:1.5px solid ${C.border};border-radius:9px;font-size:13px;color:${C.text};outline:none;transition:border .15s} .input:focus{border-color:${C.cyan};box-shadow:0 0 0 3px rgba(0,180,216,.13)} .input::placeholder{color:${C.border}} .input-auto{border-color:${C.cyan};background:${C.cyanLight}} .input-ro{background:${C.ice};color:${C.muted};cursor:default} .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all .15s} .btn-cyan{background:${C.cyan};color:#fff}.btn-cyan:hover{background:#0099bb} .btn-red{background:${C.red};color:#fff;width:100%;justify-content:center;padding:13px;font-size:14px} .btn-outline{background:transparent;border:1.5px solid ${C.cyan};color:${C.cyan}}.btn-outline:hover{background:${C.cyanLight}} .btn-ghost{background:${C.grey0};color:${C.muted};border:1.5px solid ${C.grey1}}.btn-ghost:hover{background:${C.grey1}} .btn-sm{padding:5px 11px;font-size:11px;border-radius:7px} .btn:disabled{opacity:.38;cursor:not-allowed;pointer-events:none} .alert{padding:10px 14px;border-radius:9px;font-size:13px;font-weight:500;margin-bottom:14px} .alert-err{background:${C.redLight};color:${C.red};border-left:3px solid ${C.red}} .alert-ok{background:${C.greenLight};color:${C.green};border-left:3px solid ${C.green}} .alert-info{background:${C.cyanLight};color:${C.midTeal};border-left:3px solid ${C.cyan}} .alert-warn{background:${C.orangeLight};color:${C.orange};border-left:3px solid ${C.orange}} .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700} .badge-cyan{background:${C.cyanLight};color:${C.midTeal}} .badge-green{background:${C.greenLight};color:${C.green}} .badge-orange{background:${C.orangeLight};color:${C.orange}} .badge-red{background:${C.redLight};color:${C.red}} .badge-purple{background:${C.purpleLight};color:${C.purple}} .badge-grey{background:${C.grey1};color:${C.muted}} .tbl{width:100%;border-collapse:collapse;font-size:13px} .tbl th{background:${C.ice};color:${C.muted};font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:10px 14px;text-align:left} .tbl td{padding:11px 14px;border-bottom:1px solid ${C.grey1};vertical-align:middle} .tbl tr:last-child td{border-bottom:none} .tbl tr:hover td{background:${C.ice}} .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px} .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px} .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px} .col2{grid-column:1/-1} .stack{display:flex;flex-direction:column;gap:18px} .stack-sm{display:flex;flex-direction:column;gap:10px} .flex-b{display:flex;justify-content:space-between;align-items:center} .flex-g{display:flex;gap:10px;align-items:center;flex-wrap:wrap} .tab-row{display:flex;border-bottom:2px solid ${C.grey1};margin-bottom:18px} .tab-btn{padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:transparent;color:${C.muted};border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s} .tab-btn.active{color:${C.cyan};border-bottom-color:${C.cyan}} .upload-zone{border:2px dashed ${C.border};border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .15s} .upload-zone:hover,.upload-zone.drag{border-color:${C.cyan};background:${C.cyanLight}} .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px} .cal-header{text-align:center;font-size:10px;font-weight:800;color:${C.muted};text-transform:uppercase;padding:4px 0} .cal-day{border-radius:10px;padding:7px 4px;text-align:center;border:1.5px solid ${C.grey1};transition:all .15s;min-height:52px} .cal-day.today{border-color:${C.cyan};box-shadow:0 0 0 2px rgba(0,180,216,.25)} .cal-day.off-day{background:${C.grey0};opacity:.65} .cal-day.work-day{background:${C.white};cursor:pointer}.cal-day.work-day:hover{border-color:${C.cyan};background:${C.cyanLight}} .cal-day.selected{border-color:${C.cyan};background:${C.cyanLight}} .cal-day.empty{border-color:transparent;background:transparent;min-height:0} .cal-day-num{font-size:13px;font-weight:800;color:${C.text}} .cal-shift-chip{font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;line-height:1.4;margin-top:3px;display:inline-block} .radio-group{display:flex;flex-direction:column;gap:7px} .radio-opt{display:flex;align-items:center;gap:10px;padding:9px 13px;border:1.5px solid ${C.grey1};border-radius:9px;cursor:pointer;transition:all .15s} .radio-opt:hover{border-color:${C.cyan};background:${C.cyanLight}} .radio-opt.sel{border-color:${C.cyan};background:${C.cyanLight};color:${C.deepTeal};font-weight:700} .radio-opt.disabled{opacity:.4;cursor:not-allowed;pointer-events:none} .radio-dot{width:17px;height:17px;border-radius:50%;border:2px solid ${C.border};flex-shrink:0;display:flex;align-items:center;justify-content:center} .radio-dot.on{border-color:${C.cyan};background:${C.cyan}} .radio-inner{width:6px;height:6px;border-radius:50%;background:#fff} .addr-card{border:1.5px solid ${C.grey1};border-radius:10px;padding:14px;cursor:pointer;transition:all .15s} .addr-card:hover{border-color:${C.cyan}} .addr-card.sel{border-color:${C.cyan};background:${C.cyanLight}} .route-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${C.cyanLight};color:${C.midTeal};margin-top:6px}
+// FIX: CSS is generated by a function (not a fixed constant) so that toggling
+// dark mode — which mutates the neutral tokens on C below — can regenerate
+// the stylesheet with the new colors already baked in.
+const buildCSS = () => `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap'); *,*::before,*::after{box-sizing:border-box;margin:0;padding:0} html,body{font-family:'Plus Jakarta Sans',sans-serif;background:${C.ice};color:${C.text};font-size:14px} input,select,textarea,button{font-family:inherit} .shell{display:flex;min-height:100vh} .sidebar{width:232px;flex-shrink:0;background:linear-gradient(180deg,${C.deepTeal} 0%,${C.midTeal} 100%);display:flex;flex-direction:column} .main-area{flex:1;overflow-y:auto;padding:28px 30px;min-height:100vh} .sb-logo{display:flex;align-items:center;gap:10px;padding:22px 18px 14px} .sb-logo-icon{width:36px;height:36px;background:rgba(0,180,216,.22);border-radius:10px;display:flex;align-items:center;justify-content:center} .sb-logo-title{color:#fff;font-weight:800;font-size:15px} .sb-logo-sub{color:rgba(255,255,255,.45);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em} .sb-user{margin:0 10px 6px;background:rgba(255,255,255,.09);border-radius:10px;padding:10px 12px} .sb-user-name{color:#fff;font-weight:700;font-size:13px} .sb-user-id{color:rgba(255,255,255,.45);font-size:11px;margin-top:2px} .sb-div{height:1px;background:rgba(255,255,255,.08);margin:6px 0} .sb-nav{padding:0 8px;display:flex;flex-direction:column;gap:2px} .sb-item{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:9px;font-size:13px;font-weight:600;color:rgba(255,255,255,.6);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:all .15s} .sb-item:hover{background:rgba(255,255,255,.09);color:#fff} .sb-item.active{background:rgba(0,180,216,.3);color:#fff} .sb-spacer{flex:1} .sb-bottom{padding:8px 8px 16px} .card{background:${C.white};border-radius:14px;box-shadow:0 1px 12px rgba(13,61,86,.07);padding:20px} .card-0{background:${C.white};border-radius:14px;box-shadow:0 1px 12px rgba(13,61,86,.07);overflow:hidden} .page-title{font-size:20px;font-weight:800;color:${C.text};margin-bottom:3px} .page-sub{font-size:13px;color:${C.muted};margin-bottom:22px} .sec-title{font-size:14px;font-weight:700;color:${C.text};margin-bottom:14px} .label{display:block;font-size:11px;font-weight:700;color:${C.muted};text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px} .req{color:${C.red};margin-left:2px} .input{width:100%;padding:10px 13px;border:1.5px solid ${C.border};border-radius:9px;font-size:13px;color:${C.text};outline:none;transition:border .15s} .input:focus{border-color:${C.cyan};box-shadow:0 0 0 3px rgba(0,180,216,.13)} .input::placeholder{color:${C.border}} .input-auto{border-color:${C.cyan};background:${C.cyanLight}} .input-ro{background:${C.ice};color:${C.muted};cursor:default} .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all .15s} .btn-cyan{background:${C.cyan};color:#fff}.btn-cyan:hover{background:#0099bb} .btn-red{background:${C.red};color:#fff;width:100%;justify-content:center;padding:13px;font-size:14px} .btn-outline{background:transparent;border:1.5px solid ${C.cyan};color:${C.cyan}}.btn-outline:hover{background:${C.cyanLight}} .btn-ghost{background:${C.grey0};color:${C.muted};border:1.5px solid ${C.grey1}}.btn-ghost:hover{background:${C.grey1}} .btn-sm{padding:5px 11px;font-size:11px;border-radius:7px} .btn:disabled{opacity:.38;cursor:not-allowed;pointer-events:none} .alert{padding:10px 14px;border-radius:9px;font-size:13px;font-weight:500;margin-bottom:14px} .alert-err{background:${C.redLight};color:${C.red};border-left:3px solid ${C.red}} .alert-ok{background:${C.greenLight};color:${C.green};border-left:3px solid ${C.green}} .alert-info{background:${C.cyanLight};color:${C.midTeal};border-left:3px solid ${C.cyan}} .alert-warn{background:${C.orangeLight};color:${C.orange};border-left:3px solid ${C.orange}} .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700} .badge-cyan{background:${C.cyanLight};color:${C.midTeal}} .badge-green{background:${C.greenLight};color:${C.green}} .badge-orange{background:${C.orangeLight};color:${C.orange}} .badge-red{background:${C.redLight};color:${C.red}} .badge-purple{background:${C.purpleLight};color:${C.purple}} .badge-grey{background:${C.grey1};color:${C.muted}} .tbl{width:100%;border-collapse:collapse;font-size:13px} .tbl th{background:${C.ice};color:${C.muted};font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:10px 14px;text-align:left} .tbl td{padding:11px 14px;border-bottom:1px solid ${C.grey1};vertical-align:middle} .tbl tr:last-child td{border-bottom:none} .tbl tr:hover td{background:${C.ice}} .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px} .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px} .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px} .col2{grid-column:1/-1} .stack{display:flex;flex-direction:column;gap:18px} .stack-sm{display:flex;flex-direction:column;gap:10px} .flex-b{display:flex;justify-content:space-between;align-items:center} .flex-g{display:flex;gap:10px;align-items:center;flex-wrap:wrap} .tab-row{display:flex;border-bottom:2px solid ${C.grey1};margin-bottom:18px} .tab-btn{padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:transparent;color:${C.muted};border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s} .tab-btn.active{color:${C.cyan};border-bottom-color:${C.cyan}} .upload-zone{border:2px dashed ${C.border};border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .15s} .upload-zone:hover,.upload-zone.drag{border-color:${C.cyan};background:${C.cyanLight}} .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px} .cal-header{text-align:center;font-size:10px;font-weight:800;color:${C.muted};text-transform:uppercase;padding:4px 0} .cal-day{border-radius:10px;padding:7px 4px;text-align:center;border:1.5px solid ${C.grey1};transition:all .15s;min-height:52px} .cal-day.today{border-color:${C.cyan};box-shadow:0 0 0 2px rgba(0,180,216,.25)} .cal-day.off-day{background:${C.grey0};opacity:.65} .cal-day.work-day{background:${C.white};cursor:pointer}.cal-day.work-day:hover{border-color:${C.cyan};background:${C.cyanLight}} .cal-day.selected{border-color:${C.cyan};background:${C.cyanLight}} .cal-day.empty{border-color:transparent;background:transparent;min-height:0} .cal-day-num{font-size:13px;font-weight:800;color:${C.text}} .cal-shift-chip{font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;line-height:1.4;margin-top:3px;display:inline-block} .radio-group{display:flex;flex-direction:column;gap:7px} .radio-opt{display:flex;align-items:center;gap:10px;padding:9px 13px;border:1.5px solid ${C.grey1};border-radius:9px;cursor:pointer;transition:all .15s} .radio-opt:hover{border-color:${C.cyan};background:${C.cyanLight}} .radio-opt.sel{border-color:${C.cyan};background:${C.cyanLight};color:${C.deepTeal};font-weight:700} .radio-opt.disabled{opacity:.4;cursor:not-allowed;pointer-events:none} .radio-dot{width:17px;height:17px;border-radius:50%;border:2px solid ${C.border};flex-shrink:0;display:flex;align-items:center;justify-content:center} .radio-dot.on{border-color:${C.cyan};background:${C.cyan}} .radio-inner{width:6px;height:6px;border-radius:50%;background:#fff} .addr-card{border:1.5px solid ${C.grey1};border-radius:10px;padding:14px;cursor:pointer;transition:all .15s} .addr-card:hover{border-color:${C.cyan}} .addr-card.sel{border-color:${C.cyan};background:${C.cyanLight}} .route-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${C.cyanLight};color:${C.midTeal};margin-top:6px}
  .auth-shell{min-height:100vh;display:flex}
  .auth-brand{flex:1.1;position:relative;overflow:hidden;background:linear-gradient(160deg,${C.deepTeal} 0%,${C.midTeal} 60%,${C.cyan} 170%);display:flex;flex-direction:column;justify-content:center;padding:64px 60px}
  .auth-brand-inner{position:relative;z-index:2;max-width:380px}
@@ -1482,6 +1517,13 @@ function ProfilePage({ user, onUpdate }) {
   const [af,      setAf]      = useState({ label: "", street: "", city: "", district: "", zip: "", mapsLink: "", route: "" });
   const [msg,     setMsg]     = useState(null);
   const a = k => e => setAf(p => ({ ...p, [k]: e.target.value }));
+  // FIX: light/dark appearance toggle for the whole desktop app
+  const [theme, setTheme] = useState(getSavedDesktopTheme());
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    applyDesktopTheme(next);
+  };
 
   // FIX: change password OTP state
   const [curPw,     setCurPw]     = useState("");
@@ -1605,6 +1647,30 @@ function ProfilePage({ user, onUpdate }) {
     <div className="stack">
       <div><div className="page-title">My Profile</div><div className="page-sub">Contact info and saved addresses for quick transport requests.</div></div>
       {msg && <div className={`alert alert-${msg.t === "err" ? "err" : "ok"}`}>{msg.m}</div>}
+      <div className="card">
+        <div className="sec-title">Appearance</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            onClick={toggleTheme}
+            style={{
+              width: 52, height: 28, borderRadius: 14, cursor: "pointer",
+              background: theme === "dark" ? C.cyan : C.border,
+              position: "relative", transition: "background .2s", flexShrink: 0,
+            }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: "50%", background: "#fff",
+              position: "absolute", top: 3,
+              left: theme === "dark" ? 27 : 3,
+              transition: "left .2s",
+              boxShadow: "0 1px 4px rgba(0,0,0,.2)",
+            }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{theme === "dark" ? "Dark Mode" : "Light Mode"}</div>
+            <div style={{ fontSize: 12, color: C.muted }}>Applies across the whole app on this device.</div>
+          </div>
+        </div>
+      </div>
       <div className="card">
         <div className="sec-title">Contact Information</div>
         <div className="g2">
@@ -3868,6 +3934,11 @@ function MobileHome({ user, setScreen }) {
 
   return (
     <div>
+      {user.role === "admin" && (
+        <div className="m-alert m-alert-info" style={{ margin: "12px 16px 8px" }}>
+          You're signed in as {user.empId === "ADMIN" ? "Super Admin" : "a Team Leader"}. Team &amp; route management is available on the desktop app.
+        </div>
+      )}
       <div style={{ padding: "0 16px 4px" }}>
         <button
           className="m-big-btn"
@@ -3881,9 +3952,9 @@ function MobileHome({ user, setScreen }) {
       <div className="m-section-title">My Submissions</div>
       <div className="m-card">
         {loading ? (
-          <div className="m-card-pad" style={{ textAlign: "center", color: C.muted }}>Loading…</div>
+          <div className="m-card-pad" style={{ textAlign: "center", color: "var(--m-muted)" }}>Loading…</div>
         ) : apps.length === 0 ? (
-          <div className="m-card-pad" style={{ textAlign: "center", color: C.muted }}>
+          <div className="m-card-pad" style={{ textAlign: "center", color: "var(--m-muted)" }}>
             No submissions yet — tap the button above to get started.
           </div>
         ) : (
@@ -3891,10 +3962,10 @@ function MobileHome({ user, setScreen }) {
             {apps.slice(0, 20).map(a => (
               <div
                 key={a.id}
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${C.grey1}` }}>
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${"var(--m-border)"}` }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{a.date}</div>
-                  <div style={{ fontSize: 12, color: C.muted }}>
+                  <div style={{ fontSize: 12, color: "var(--m-muted)" }}>
                     {a.shift}{a.dinnerMeal ? ` · 🍽 ${a.dinnerMeal}` : ""}
                   </div>
                 </div>
@@ -4074,7 +4145,7 @@ function MobileTransportForm({ user, onDone }) {
           <Ico n="check" s={28} c={C.green} />
         </div>
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>Request Submitted!</div>
-        <div style={{ color: C.muted, fontSize: 13, marginBottom: 6 }}>
+        <div style={{ color: "var(--m-muted)", fontSize: 13, marginBottom: 6 }}>
           {submittedForm.isDinnerOnly
             ? <span>Dinner only for <b>{submittedForm.date}</b> · <b>{submittedForm.shift}</b></span>
             : <span><b>{submittedForm.date}</b> · <b>{submittedForm.shift}</b> · <b>{submittedForm.pickDrop}</b></span>}
@@ -4139,7 +4210,7 @@ function MobileTransportForm({ user, onDone }) {
             const disabled = (opt === "PICK" && dayUsage.hasPick) || (opt === "DROP" && dayUsage.hasDrop);
             return (
               <button key={opt} disabled={disabled} onClick={() => handlePickDrop(opt)}
-                style={{ flex: 1, minHeight: 52, borderRadius: 14, cursor: disabled ? "not-allowed" : "pointer", border: `2px solid ${on ? col : C.grey1}`, background: on ? bg : "#fff", fontWeight: 800, fontSize: 15, color: on ? col : C.text, opacity: disabled ? .4 : 1 }}>
+                style={{ flex: 1, minHeight: 52, borderRadius: 14, cursor: disabled ? "not-allowed" : "pointer", border: `2px solid ${on ? col : "var(--m-border)"}`, background: on ? bg : "#fff", fontWeight: 800, fontSize: 15, color: on ? col : "var(--m-text)", opacity: disabled ? .4 : 1 }}>
                 {opt}
               </button>
             );
@@ -4181,7 +4252,7 @@ function MobileTransportForm({ user, onDone }) {
               const on = form.wantsDinner === val;
               return (
                 <button key={String(val)} onClick={() => setForm(p => ({ ...p, wantsDinner: val, dinnerMeal: val ? p.dinnerMeal : "" }))}
-                  style={{ flex: 1, minHeight: 48, borderRadius: 12, border: `2px solid ${on ? C.purple : C.grey1}`, background: on ? C.purpleLight : "#fff", fontWeight: 700, color: on ? C.purple : C.text }}>
+                  style={{ flex: 1, minHeight: 48, borderRadius: 12, border: `2px solid ${on ? C.purple : "var(--m-border)"}`, background: on ? C.purpleLight : "#fff", fontWeight: 700, color: on ? C.purple : "var(--m-text)" }}>
                   {lbl}
                 </button>
               );
@@ -4260,7 +4331,7 @@ function MobileTransportForm({ user, onDone }) {
             ) : (
               <>
                 <MonthCalendar year={selYear} month={selMonth} rosterMonth={rosterMonth} onSelectDate={pickDate} selectedDate={selDate} />
-                {!selDate && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: C.muted }}>Tap a working day to auto-fill the form ↓</div>}
+                {!selDate && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "var(--m-muted)" }}>Tap a working day to auto-fill the form ↓</div>}
               </>
             )}
           </div></div>
@@ -4395,7 +4466,7 @@ function MobileRoster({ user, onUserUpdate }) {
         {preview && pendingData && (
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button className="m-submit-btn" style={{ background: C.green, flex: 1, margin: 0 }} onClick={importData}>Import</button>
-            <button className="m-submit-btn" style={{ background: C.muted, flex: 1, margin: 0 }} onClick={() => { setPendingData(null); setPreview(null); setMsg(null); }}>Discard</button>
+            <button className="m-submit-btn" style={{ background: "var(--m-muted)", flex: 1, margin: 0 }} onClick={() => { setPendingData(null); setPreview(null); setMsg(null); }}>Discard</button>
           </div>
         )}
       </div></div>
@@ -4406,12 +4477,12 @@ function MobileRoster({ user, onUserUpdate }) {
           {Object.keys(rosterMonth).length > 0 && (
             <div style={{ display: "flex", gap: 6 }}>
               <span className="m-badge" style={{ background: C.greenLight, color: C.green }}>{workDays} working</span>
-              <span className="m-badge" style={{ background: C.grey1, color: C.muted }}>{offDays} off</span>
+              <span className="m-badge" style={{ background: "var(--m-border)", color: "var(--m-muted)" }}>{offDays} off</span>
             </div>
           )}
         </div>
         {Object.keys(rosterMonth).length === 0 ? (
-          <div style={{ textAlign: "center", padding: "24px 10px", color: C.muted, fontSize: 13 }}>
+          <div style={{ textAlign: "center", padding: "24px 10px", color: "var(--m-muted)", fontSize: 13 }}>
             No roster for this month. Upload your Excel file above.
           </div>
         ) : (
@@ -4537,7 +4608,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
           </button>
         </div>
         {editing !== null && (
-          <div style={{ background: C.ice, border: `1.5px solid ${C.cyan}`, borderRadius: 12, padding: 12, marginBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ background: "var(--m-surface2)", border: `1.5px solid ${C.cyan}`, borderRadius: 12, padding: 12, marginBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>
             <input className="m-input" placeholder="Label (e.g. Home)" value={af.label} onChange={e => setAf(p => ({ ...p, label: e.target.value }))} />
             <input className="m-input" placeholder="Street" value={af.street} onChange={e => setAf(p => ({ ...p, street: e.target.value }))} />
             <input className="m-input" placeholder="City" value={af.city} onChange={e => setAf(p => ({ ...p, city: e.target.value }))} />
@@ -4548,12 +4619,12 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
             <input className="m-input" placeholder="Google Maps link (optional)" value={af.mapsLink} onChange={e => setAf(p => ({ ...p, mapsLink: e.target.value }))} />
             <div style={{ display: "flex", gap: 8 }}>
               <button className="m-submit-btn" style={{ margin: 0, flex: 1 }} onClick={saveAddr}>Save</button>
-              <button className="m-submit-btn" style={{ margin: 0, flex: 1, background: C.muted }} onClick={() => setEditing(null)}>Cancel</button>
+              <button className="m-submit-btn" style={{ margin: 0, flex: 1, background: "var(--m-muted)" }} onClick={() => setEditing(null)}>Cancel</button>
             </div>
           </div>
         )}
         {addrs.length === 0 ? (
-          <div style={{ textAlign: "center", color: C.muted, fontSize: 13, padding: "10px 0" }}>No saved addresses yet.</div>
+          <div style={{ textAlign: "center", color: "var(--m-muted)", fontSize: 13, padding: "10px 0" }}>No saved addresses yet.</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {addrs.map((addr, i) => (
@@ -4564,7 +4635,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
                   <div className="m-option-sub">{addr.street}, {addr.city} · {addr.route}</div>
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => openEdit(i)} style={{ background: "none", border: "none", minWidth: 32, minHeight: 32 }}><Ico n="edit" s={15} c={C.muted} /></button>
+                  <button onClick={() => openEdit(i)} style={{ background: "none", border: "none", minWidth: 32, minHeight: 32 }}><Ico n="edit" s={15} c={"var(--m-muted)"} /></button>
                   <button onClick={() => delAddr(i)} style={{ background: "none", border: "none", minWidth: 32, minHeight: 32 }}><Ico n="trash" s={15} c={C.red} /></button>
                 </div>
               </div>
@@ -4614,7 +4685,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
             <button className="m-submit-btn" style={{ margin: "6px 0 0" }} disabled={pwLoading} onClick={verifyPwOtp}>
               {pwLoading ? "Verifying…" : "Confirm Change"}
             </button>
-            <button onClick={() => { setPwStep("form"); setPwMsg(null); }} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontWeight: 700, padding: 8 }}>← Back</button>
+            <button onClick={() => { setPwStep("form"); setPwMsg(null); }} style={{ background: "none", border: "none", color: "var(--m-muted)", fontSize: 12, fontWeight: 700, padding: 8 }}>← Back</button>
           </div>
         )}
       </div></div>
@@ -4635,11 +4706,23 @@ export default function App() {
   const [booting,  setBooting]  = useState(true);
   const [dbError,  setDbError]  = useState(null);
   const isMobile = useMobile();
+  // FIX: bumped whenever applyDesktopTheme() mutates C, so the whole tree
+  // re-renders and every C-token-driven inline style picks up the new colors.
+  const [, forceThemeRerender] = useState(0);
 
   useEffect(() => {
+    // Apply any saved desktop theme before the first stylesheet is built, so
+    // there's no flash of the wrong palette on load.
+    const savedTheme = getSavedDesktopTheme();
+    if (savedTheme === "dark") Object.assign(C, DARK_SURFACE);
+
     const el = document.createElement("style");
-    el.textContent = CSS;
+    el.id = "th-desktop-style";
+    el.textContent = buildCSS();
     document.head.appendChild(el);
+
+    const onThemeChanged = () => forceThemeRerender(t => t + 1);
+    window.addEventListener("th-theme-changed", onThemeChanged);
 
     let done = false;
     const finish = (err = null) => {
@@ -4681,7 +4764,11 @@ export default function App() {
       }
     } catch (e) { /* localStorage unavailable — skip cleanup silently */ }
 
-    return () => { document.head.removeChild(el); clearTimeout(timer); };
+    return () => {
+      document.head.removeChild(el);
+      clearTimeout(timer);
+      window.removeEventListener("th-theme-changed", onThemeChanged);
+    };
   }, []);
 
   const logout = () => { Session.set({}); setUser(null); };
@@ -4716,7 +4803,16 @@ export default function App() {
   );
 
   if (!user) return <AuthScreen onLogin={setUser} />;
-  if (user.role === "admin") return <AdminDashboard user={user} onLogout={logout} />;
+  // FIX: Team Leaders and Super Admin can apply for their own transport/dinner
+  // from a phone just like an employee — on mobile they get the same
+  // MobileEmployeeShell. Managing the team (Route View, Dinner, Employees,
+  // Settings etc.) is desktop-only, so on a larger screen they still land on
+  // the full AdminDashboard.
+  if (user.role === "admin") {
+    return isMobile
+      ? <MobileEmployeeShell user={user} onLogout={logout} />
+      : <AdminDashboard user={user} onLogout={logout} />;
+  }
   return isMobile
     ? <MobileEmployeeShell user={user} onLogout={logout} />
     : <EmployeeShell user={user} onLogout={logout} />;
