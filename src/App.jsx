@@ -642,6 +642,8 @@ const MOBILE_CSS = `
 .m-submit-btn-purple{background:${C.purple}}
 .m-option{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--m-border);border-radius:12px;cursor:pointer;transition:all .15s;background:var(--m-surface)}
 .m-option.sel{border-color:var(--m-accent);background:${C.cyanLight}}
+.m-option.sel .m-option-text{color:${C.deepTeal}}
+.m-option.sel .m-option-sub{color:${C.midTeal}}
 .m-option-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .m-option-text{font-weight:600;font-size:15px;color:var(--m-text)}
 .m-option-sub{font-size:12px;color:var(--m-muted);margin-top:2px}
@@ -4210,7 +4212,7 @@ function MobileTransportForm({ user, onDone }) {
             const disabled = (opt === "PICK" && dayUsage.hasPick) || (opt === "DROP" && dayUsage.hasDrop);
             return (
               <button key={opt} disabled={disabled} onClick={() => handlePickDrop(opt)}
-                style={{ flex: 1, minHeight: 52, borderRadius: 14, cursor: disabled ? "not-allowed" : "pointer", border: `2px solid ${on ? col : "var(--m-border)"}`, background: on ? bg : "#fff", fontWeight: 800, fontSize: 15, color: on ? col : "var(--m-text)", opacity: disabled ? .4 : 1 }}>
+                style={{ flex: 1, minHeight: 52, borderRadius: 14, cursor: disabled ? "not-allowed" : "pointer", border: `2px solid ${on ? col : "var(--m-border)"}`, background: on ? bg : "var(--m-surface)", fontWeight: 800, fontSize: 15, color: on ? col : "var(--m-text)", opacity: disabled ? .4 : 1 }}>
                 {opt}
               </button>
             );
@@ -4252,7 +4254,7 @@ function MobileTransportForm({ user, onDone }) {
               const on = form.wantsDinner === val;
               return (
                 <button key={String(val)} onClick={() => setForm(p => ({ ...p, wantsDinner: val, dinnerMeal: val ? p.dinnerMeal : "" }))}
-                  style={{ flex: 1, minHeight: 48, borderRadius: 12, border: `2px solid ${on ? C.purple : "var(--m-border)"}`, background: on ? C.purpleLight : "#fff", fontWeight: 700, color: on ? C.purple : "var(--m-text)" }}>
+                  style={{ flex: 1, minHeight: 48, borderRadius: 12, border: `2px solid ${on ? C.purple : "var(--m-border)"}`, background: on ? C.purpleLight : "var(--m-surface)", fontWeight: 700, color: on ? C.purple : "var(--m-text)" }}>
                   {lbl}
                 </button>
               );
