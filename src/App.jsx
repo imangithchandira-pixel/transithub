@@ -262,13 +262,18 @@ const DB = {
       console.warn("touchActivity failed:", e.message);
     }
   },
-  // FIX: deletes employee accounts (never admins) inactive for 30+ days.
-  // "Inactive" = no login and no transport/dinner submission in 30 days.
-  // Falls back to created_at if last_active was never set (e.g. registered but never logged in).
+  // FIX: deletes employee accounts (never admins) inactive for the
+  // configured number of days (default 30). "Inactive" = no login and no
+  // transport/dinner submission in that window. Falls back to created_at if
+  // last_active was never set (e.g. registered but never logged in).
+  // Their past submissions are NOT deleted — every cc_apps row already
+  // stores its own snapshot of the employee's name/ID/phone/address, so
+  // historical dispatch and dinner records stay intact and reportable even
+  // after the login itself is removed for inactivity.
   cleanupInactiveEmployees: async () => {
     try {
-      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-      const cutoff = Date.now() - THIRTY_DAYS_MS;
+      const days = Number(await DB.getSetting("retention_inactive_days")) || 30;
+      const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
       const rawUsers = await DB.getUsers();
       const stale = rawUsers.filter(u => {
         if (u.role === "admin") return false; // never auto-delete admins/team leaders
@@ -277,8 +282,6 @@ const DB = {
         return new Date(ref).getTime() < cutoff;
       });
       for (const u of stale) {
-        // clean up their submissions too, then the account itself
-        await supa("DELETE", "cc_apps", { filter: `user_id=eq.${u.id}` }).catch(() => {});
         await supa("DELETE", "cc_users", { filter: `id=eq.${u.id}` }).catch(() => {});
       }
       return stale.length;
@@ -287,22 +290,32 @@ const DB = {
       return 0;
     }
   },
-  // FIX: auto-delete transport/dinner submissions older than 90 days
-  // and remove roster months older than 60 days from every user's roster_data.
-  // Keeps the database lean without any manual intervention.
+  // FIX: auto-delete transport/dinner submissions older than the configured
+  // retention window (default 90 days), and strip roster months older than
+  // the configured window (default 60 days) from every user's roster_data.
+  // Submissions from the current or previous calendar month are NEVER
+  // deleted regardless of the configured day count — a safety floor so a
+  // short retention setting can't eat data before it's had a chance to be
+  // exported as a monthly report.
   cleanupOldData: async () => {
     try {
-      const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
-      const SIXTY_DAYS_MS  = 60 * 24 * 60 * 60 * 1000;
+      const subDays  = Number(await DB.getSetting("retention_submission_days")) || 90;
+      const rostDays = Number(await DB.getSetting("retention_roster_days")) || 60;
 
-      // 1. Delete cc_apps submissions older than 90 days
-      const submissionCutoff = new Date(Date.now() - NINETY_DAYS_MS);
+      // 1. Delete cc_apps submissions older than the retention window, but
+      // never anything from the current or previous calendar month.
+      const now = new Date();
+      const floor = new Date(now.getFullYear(), now.getMonth() - 1, 1); // 1st of previous month
+      const byDays = new Date(Date.now() - subDays * 24 * 60 * 60 * 1000);
+      const submissionCutoff = byDays < floor ? byDays : floor;
       const submissionCutoffStr = submissionCutoff.toISOString().split("T")[0];
       await supa("DELETE", "cc_apps", { filter: `date=lt.${submissionCutoffStr}` }).catch(() => {});
 
-      // 2. Strip roster months older than 60 days from every user's roster_data
-      const rosterCutoff = new Date(Date.now() - SIXTY_DAYS_MS);
-      const rosterCutoffKey = `${rosterCutoff.getFullYear()}-${String(rosterCutoff.getMonth() + 1).padStart(2, "0")}`;
+      // 2. Strip roster months older than the retention window from every
+      // user's roster_data (same current/previous-month floor).
+      const byDaysRoster = new Date(Date.now() - rostDays * 24 * 60 * 60 * 1000);
+      const rosterCutoffDate = byDaysRoster < floor ? byDaysRoster : floor;
+      const rosterCutoffKey = `${rosterCutoffDate.getFullYear()}-${String(rosterCutoffDate.getMonth() + 1).padStart(2, "0")}`;
       const rawUsers = await DB.getUsers();
       for (const u of rawUsers) {
         const rd = u.roster_data || {};
@@ -320,6 +333,28 @@ const DB = {
     } catch (e) {
       console.warn("cleanupOldData failed:", e.message);
     }
+  },
+  // FIX: configurable retention windows (days), stored the same way as the
+  // submission cutoff times. Defaults preserve the original hardcoded values.
+  getRetentionSettings: async () => {
+    const [inactive, submissions, roster, lastRun] = await Promise.all([
+      supa("GET", "cc_settings", { filter: "select=value&key=eq.retention_inactive_days", single: true }).catch(() => null),
+      supa("GET", "cc_settings", { filter: "select=value&key=eq.retention_submission_days", single: true }).catch(() => null),
+      supa("GET", "cc_settings", { filter: "select=value&key=eq.retention_roster_days", single: true }).catch(() => null),
+      supa("GET", "cc_settings", { filter: "select=value&key=eq.retention_last_run", single: true }).catch(() => null),
+    ]);
+    return {
+      inactiveDays:    inactive?.value    || "30",
+      submissionDays:  submissions?.value || "90",
+      rosterDays:      roster?.value      || "60",
+      lastRun:         lastRun?.value     || null,
+    };
+  },
+  setRetentionSetting: async (key, days) => {
+    await supa("POST", "cc_settings", { body: { key: `retention_${key}`, value: String(days) }, single: true });
+  },
+  setRetentionLastRun: async () => {
+    await supa("POST", "cc_settings", { body: { key: "retention_last_run", value: new Date().toISOString() }, single: true });
   },
   getSetting: async (key) => {
     const d = await supa("GET", "cc_settings", { filter: `select=value&key=eq.${key}`, single: true });
@@ -3308,6 +3343,10 @@ function AdminDashboard({ user, onLogout }) {
   const [apps,        setApps]        = useState([]);
   const [filter,      setFilter]      = useState("All");
   const [search,      setSearch]      = useState("");
+  // FIX: month/year scope for the CSV export — independent of the on-screen
+  // search/type filter, so browsing isn't affected by the export scope.
+  const [expMonth,    setExpMonth]    = useState("all"); // "all" | 1-12
+  const [expYear,     setExpYear]     = useState(nowYear());
   const [loadingApps, setLoadingApps] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [admins,       setAdmins]     = useState([]);
@@ -3330,6 +3369,12 @@ function AdminDashboard({ user, onLogout }) {
   // FIX: whether TLs can see/manage cutoff settings
   const [cutoffTLAccess,    setCutoffTLAccess]    = useState(false);
   const [cutoffTLSaving,    setCutoffTLSaving]    = useState(false);
+  // FIX: configurable data-retention windows + manual cleanup trigger
+  const [retention,        setRetention]        = useState({ inactiveDays: "30", submissionDays: "90", rosterDays: "60", lastRun: null });
+  const [retentionDraft,   setRetentionDraft]    = useState({ inactiveDays: "30", submissionDays: "90", rosterDays: "60" });
+  const [retentionSaving,  setRetentionSaving]   = useState(false);
+  const [cleanupRunning,   setCleanupRunning]    = useState(false);
+  const [cleanupMsg,       setCleanupMsg]        = useState(null);
   const [users,        setUsers]       = useState([]);
   // FIX: admin "Reset Password" fallback state
   const [resetPwUserId, setResetPwUserId] = useState(null);
@@ -3347,6 +3392,12 @@ function AdminDashboard({ user, onLogout }) {
     DB.getCutoffTLAccess().then(setCutoffTLAccess);
     DB.getWhitelistVisible().then(setWhitelistVisible);
   }, []);
+  useEffect(() => {
+    DB.getRetentionSettings().then(r => {
+      setRetention(r);
+      setRetentionDraft({ inactiveDays: r.inactiveDays, submissionDays: r.submissionDays, rosterDays: r.rosterDays });
+    });
+  }, []);
   useEffect(() => { DB.getAdmins().then(setAdmins); }, []);
   useEffect(() => { DB.getUsers().then(raw => setUsers(raw.map(userFromDb).filter(u => u.empId !== "ADMIN").sort((a, b) => {
     if (a.role === "admin" && b.role !== "admin") return -1;
@@ -3358,6 +3409,34 @@ function AdminDashboard({ user, onLogout }) {
     await DB.setSetting("supplier", supplierDraft);
     setSupplier(supplierDraft);
     setSupplierEdit(false);
+  };
+
+  const saveRetention = async () => {
+    setRetentionSaving(true);
+    await Promise.all([
+      DB.setRetentionSetting("inactive_days", retentionDraft.inactiveDays),
+      DB.setRetentionSetting("submission_days", retentionDraft.submissionDays),
+      DB.setRetentionSetting("roster_days", retentionDraft.rosterDays),
+    ]);
+    setRetention(r => ({ ...r, ...retentionDraft }));
+    setRetentionSaving(false);
+  };
+
+  // FIX: lets a Super Admin trigger the cleanup pass on demand, instead of
+  // only relying on someone happening to load the app 24h+ after the last run.
+  const runCleanupNow = async () => {
+    setCleanupRunning(true);
+    setCleanupMsg(null);
+    try {
+      const [removedAccounts] = await Promise.all([DB.cleanupInactiveEmployees(), DB.cleanupOldData()]);
+      await DB.setRetentionLastRun();
+      const r = await DB.getRetentionSettings();
+      setRetention(r);
+      setCleanupMsg({ t: "ok", m: `Cleanup complete — ${removedAccounts} inactive account(s) removed. Old submissions/roster months past retention were also cleared.` });
+    } catch (e) {
+      setCleanupMsg({ t: "err", m: "Cleanup failed: " + e.message });
+    }
+    setCleanupRunning(false);
   };
 
   const filtered = apps
@@ -3422,11 +3501,18 @@ function AdminDashboard({ user, onLogout }) {
   };
 
   const exportCSV = () => {
+    // FIX: scope the export to the selected month (or "all" for the full
+    // history), on top of whatever search/type filter is currently applied
+    // on screen — gives a proper monthly report instead of always dumping
+    // everything.
+    const monthKey = expMonth === "all" ? null : `${expYear}-${String(expMonth).padStart(2, "0")}`;
+    const rows = monthKey ? filtered.filter(a => a.date?.startsWith(monthKey)) : filtered;
     const H = ["App ID", "Emp ID", "Name", "Date", "Shift", "Pick/Drop", "Address", "Maps", "Route", "Contact", "Submitted"];
-    const R = filtered.map(a => [a.id, a.empId, a.empName, a.date, a.shift, a.pickDrop, a.address, a.mapsLink || "", a.route, a.phone || "", a.submittedAt]);
+    const R = rows.map(a => [a.id, a.empId, a.empName, a.date, a.shift, a.pickDrop, a.address, a.mapsLink || "", a.route, a.phone || "", a.submittedAt]);
     const csv = [H, ...R].map(r => r.map(v => `"${String(v || "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const label = monthKey ? monthKey : "all-time";
     triggerDownload(
-      "transport_applications.csv",
+      `transport_applications_${label}.csv`,
       "data:text/csv;charset=utf-8," + encodeURIComponent(csv)
     );
   };
@@ -3512,7 +3598,22 @@ function AdminDashboard({ user, onLogout }) {
                     <button key={f} className={`btn btn-sm ${filter === f ? "btn-cyan" : "btn-ghost"}`} onClick={() => setFilter(f)}>{f}</button>
                   ))}
                 </div>
-                <button className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }} onClick={exportCSV}><Ico n="download" s={13} />Export CSV</button>
+                {/* FIX: month/year scope for the CSV export — monthly report instead of always exporting everything */}
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginLeft: "auto" }}>
+                  <select className="input" style={{ width: "auto", padding: "6px 10px", fontSize: 12 }} value={expMonth} onChange={e => setExpMonth(e.target.value === "all" ? "all" : Number(e.target.value))}>
+                    <option value="all">All time</option>
+                    {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                  </select>
+                  {expMonth !== "all" && (
+                    <select className="input" style={{ width: "auto", padding: "6px 10px", fontSize: 12 }} value={expYear} onChange={e => setExpYear(Number(e.target.value))}>
+                      {[nowYear() - 1, nowYear(), nowYear() + 1].map(y => <option key={y}>{y}</option>)}
+                    </select>
+                  )}
+                  <button className="btn btn-outline btn-sm" onClick={exportCSV}>
+                    <Ico n="download" s={13} />
+                    Export CSV{expMonth !== "all" ? ` — ${MONTHS[expMonth - 1]} ${expYear}` : ""}
+                  </button>
+                </div>
               </div>
               {filtered.length === 0 ? (
                 <div style={{ padding: 40, textAlign: "center", color: C.muted }}>{loadingApps ? "Loading…" : "No applications."}</div>
@@ -3811,6 +3912,57 @@ function AdminDashboard({ user, onLogout }) {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {isSuperAdmin && (
+              <div className="card">
+                <div className="sec-title">🗄 Data Retention</div>
+                <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
+                  Controls automatic cleanup, which runs at most once a day whenever someone opens the app. Submissions and roster months from the current or previous calendar month are never deleted, regardless of the values below — this protects data you haven't exported yet.
+                </div>
+
+                {cleanupMsg && <div className={`alert alert-${cleanupMsg.t === "err" ? "err" : "ok"}`}>{cleanupMsg.m}</div>}
+
+                <div style={{ background: C.ice, borderRadius: 12, padding: 16, border: `1.5px solid ${C.borderLight}`, marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Retention Windows</div>
+                  <div className="stack-sm">
+                    {[
+                      { key: "inactiveDays",   label: "Inactive employee accounts", sub: "No login and no submission in this many days — account is removed (their past submissions are kept)" },
+                      { key: "submissionDays", label: "Transport & dinner submissions", sub: "Older than this many days are permanently deleted" },
+                      { key: "rosterDays",     label: "Uploaded roster months", sub: "Older than this many days are stripped from each employee's roster" },
+                    ].map(({ key, label, sub }) => (
+                      <div key={key} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{label}</div>
+                          <div style={{ fontSize: 11, color: C.muted }}>{sub}</div>
+                        </div>
+                        <input
+                          type="number" min="1" className="input"
+                          style={{ width: 90, padding: "8px 10px" }}
+                          value={retentionDraft[key]}
+                          onChange={e => setRetentionDraft(p => ({ ...p, [key]: e.target.value }))}
+                        />
+                        <span style={{ fontSize: 12, color: C.muted, minWidth: 30 }}>days</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+                    <button className="btn btn-cyan btn-sm" disabled={retentionSaving} onClick={saveRetention}>
+                      <Ico n="check" s={13} />{retentionSaving ? "Saving…" : "Save Retention Settings"}
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setRetentionDraft({ inactiveDays: retention.inactiveDays, submissionDays: retention.submissionDays, rosterDays: retention.rosterDays })}>Reset</button>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <button className="btn btn-outline btn-sm" disabled={cleanupRunning} onClick={runCleanupNow}>
+                    <Ico n="check" s={13} />{cleanupRunning ? "Running…" : "Run Cleanup Now"}
+                  </button>
+                  <span style={{ fontSize: 12, color: C.muted }}>
+                    Last ran: <b style={{ color: C.text }}>{retention.lastRun ? new Date(retention.lastRun).toLocaleString() : "never"}</b>
+                  </span>
+                </div>
               </div>
             )}
 
@@ -4859,10 +5011,11 @@ export default function App() {
       const last = Number(localStorage.getItem(CLEANUP_KEY) || 0);
       if (Date.now() - last > 24 * 60 * 60 * 1000) {
         Promise.all([
-          DB.cleanupInactiveEmployees(),  // deletes accounts inactive 30+ days
-          DB.cleanupOldData(),            // deletes submissions & roster months older than 40 days
+          DB.cleanupInactiveEmployees(),  // deletes accounts inactive N+ days (configurable, default 30)
+          DB.cleanupOldData(),            // deletes submissions/roster months past retention (configurable; never touches current/previous month)
         ]).then(() => {
           localStorage.setItem(CLEANUP_KEY, String(Date.now()));
+          DB.setRetentionLastRun(); // FIX: record server-side so admins can see when cleanup last actually ran
         });
       }
     } catch (e) { /* localStorage unavailable — skip cleanup silently */ }
