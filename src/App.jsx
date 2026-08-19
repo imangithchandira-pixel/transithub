@@ -1861,7 +1861,7 @@ function TransportForm({ user }) {
     setAutoFields(p => ({ ...p, [k]: false }));
   };
 
-  useEffect(() => {
+  const refreshDayUsage = () => {
     if (!form.date) { setDayUsage({ hasPick: false, hasDrop: false, hasDinner: false }); return; }
     DB.getUserApps(user.id).then(apps => {
       const dayApps = apps.filter(a => a.date === form.date);
@@ -1871,7 +1871,8 @@ function TransportForm({ user }) {
         hasDinner: dayApps.some(a => a.dinnerMeal),
       });
     });
-  }, [form.date, user.id]);
+  };
+  useEffect(refreshDayUsage, [form.date, user.id]);
 
   const switchMode = (m) => {
     setMode(m); setMsg(null);
@@ -2418,35 +2419,91 @@ function TransportForm({ user }) {
       )}
 
       {/* FIX: pass userId so list refreshes after a new submission */}
-      <MyApplications userId={user.id} refreshTrigger={submitted} />
+      <MyApplications userId={user.id} refreshTrigger={submitted} onChanged={refreshDayUsage} />
     </div>
   );
 }
 
 // FIX: added refreshTrigger prop so the list reloads after a new submission
-function MyApplications({ userId, refreshTrigger }) {
+// FIX: userId + refreshTrigger keep the list current; onChanged lets the
+// parent form's PICK/DROP/dinner dedupe state refresh immediately after a
+// cancel, so a cancelled date can be resubmitted without reselecting it.
+function MyApplications({ userId, refreshTrigger, onChanged }) {
   const [apps, setApps] = useState([]);
-  useEffect(() => { DB.getUserApps(userId).then(setApps); }, [userId, refreshTrigger]);
+  const [rosterData, setRosterData] = useState({});
+  const [confirmCancel, setConfirmCancel] = useState(null);
+  const [cancelMsg, setCancelMsg] = useState(null);
+
+  const reload = () => {
+    DB.getUserApps(userId).then(setApps);
+    DB.getUserById(userId).then(raw => setRosterData(raw?.roster_data || {}));
+  };
+  useEffect(reload, [userId, refreshTrigger]);
+
+  const cancelApp = async (id) => {
+    await DB.deleteApp(id);
+    setApps(prev => prev.filter(a => a.id !== id));
+    setConfirmCancel(null);
+    setCancelMsg({ t: "ok", m: "Request cancelled — you can submit a new one for this date." });
+    onChanged?.();
+  };
+
+  // FIX: flags a submission whose stored shift no longer matches the current
+  // roster for that date — the usual sign of a mid-month roster amendment
+  // landing after the employee already applied.
+  const rosterMismatch = (a) => {
+    if (!a.date || !a.shift) return null;
+    const monthKey = a.date.slice(0, 7);
+    const entry = rosterData[monthKey]?.[a.date];
+    const currentShift = entry?.shiftInfo?.label;
+    if (!currentShift || entry?.shiftInfo?.off || currentShift === a.shift) return null;
+    return currentShift;
+  };
+
   if (!apps.length) return null;
   return (
     <div className="card-0">
       <div style={{ padding: "14px 18px", borderBottom: `1px solid ${C.grey1}` }}>
         <div className="sec-title" style={{ margin: 0 }}>My Submissions ({apps.length})</div>
       </div>
+      {cancelMsg && <div className={`alert alert-${cancelMsg.t === "err" ? "err" : "ok"}`} style={{ margin: "0 18px" }}>{cancelMsg.m}</div>}
       <div style={{ overflowX: "auto" }}>
         <table className="tbl">
-          <thead><tr><th>Date</th><th>Shift</th><th>Type</th><th>Dinner</th><th>Route</th><th>Submitted</th></tr></thead>
+          <thead><tr><th>Date</th><th>Shift</th><th>Type</th><th>Dinner</th><th>Route</th><th>Submitted</th><th>Action</th></tr></thead>
           <tbody>
-            {apps.map(a => (
-              <tr key={a.id}>
-                <td style={{ fontWeight: 700 }}>{a.date}</td>
-                <td><span className="badge badge-cyan">{a.shift}</span></td>
-                <td><span className={`badge ${a.pickDrop === "PICK" ? "badge-green" : a.pickDrop === "DINNER_ONLY" ? "badge-purple" : "badge-orange"}`}>{a.pickDrop === "DINNER_ONLY" ? "🍽 Dinner" : a.pickDrop}</span></td>
-                <td>{a.dinnerMeal ? <span className="badge badge-purple">{a.dinnerMeal}</span> : <span style={{ color: C.border, fontSize: 11 }}>—</span>}</td>
-                <td style={{ fontSize: 12 }}>{a.route || "—"}</td>
-                <td style={{ fontSize: 11, color: C.muted }}>{new Date(a.submittedAt).toLocaleString()}</td>
-              </tr>
-            ))}
+            {apps.map(a => {
+              const newShift = rosterMismatch(a);
+              return (
+                <tr key={a.id}>
+                  <td style={{ fontWeight: 700 }}>{a.date}</td>
+                  <td>
+                    <span className="badge badge-cyan">{a.shift}</span>
+                    {newShift && (
+                      <div style={{ marginTop: 4, fontSize: 11, color: C.orange, fontWeight: 700, maxWidth: 160 }}>
+                        ⚠ Roster now shows {newShift} — cancel &amp; resubmit
+                      </div>
+                    )}
+                  </td>
+                  <td><span className={`badge ${a.pickDrop === "PICK" ? "badge-green" : a.pickDrop === "DINNER_ONLY" ? "badge-purple" : "badge-orange"}`}>{a.pickDrop === "DINNER_ONLY" ? "🍽 Dinner" : a.pickDrop}</span></td>
+                  <td>{a.dinnerMeal ? <span className="badge badge-purple">{a.dinnerMeal}</span> : <span style={{ color: C.border, fontSize: 11 }}>—</span>}</td>
+                  <td style={{ fontSize: 12 }}>{a.route || "—"}</td>
+                  <td style={{ fontSize: 11, color: C.muted }}>{new Date(a.submittedAt).toLocaleString()}</td>
+                  <td>
+                    {confirmCancel === a.id ? (
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <span style={{ fontSize: 10, color: C.red, fontWeight: 700 }}>Sure?</span>
+                        <button className="btn btn-sm" style={{ background: C.red, color: "#fff", padding: "3px 8px" }} onClick={() => cancelApp(a.id)}>Yes</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmCancel(null)}>No</button>
+                      </div>
+                    ) : (
+                      <button className="btn btn-ghost btn-sm" style={{ color: C.red }} onClick={() => { setConfirmCancel(a.id); setCancelMsg(null); }}>
+                        <Ico n="trash" s={12} c={C.red} /> Cancel
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -3929,10 +3986,30 @@ function MobileEmployeeShell({ user: initUser, onLogout }) {
 function MobileHome({ user, setScreen }) {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [confirmCancel, setConfirmCancel] = useState(null);
+  const [cancelMsg, setCancelMsg] = useState(null);
+  const rosterData = user.rosterData || {};
 
-  useEffect(() => {
-    DB.getUserApps(user.id).then(a => { setApps(a); setLoading(false); });
-  }, [user.id]);
+  const reload = () => { DB.getUserApps(user.id).then(a => { setApps(a); setLoading(false); }); };
+  useEffect(reload, [user.id]);
+
+  const cancelApp = async (id) => {
+    await DB.deleteApp(id);
+    setApps(prev => prev.filter(a => a.id !== id));
+    setConfirmCancel(null);
+    setCancelMsg("Request cancelled — you can submit a new one for this date.");
+  };
+
+  // FIX: flags a submission whose stored shift no longer matches the current
+  // roster for that date — the sign of a mid-month roster amendment landing
+  // after this was already submitted.
+  const rosterMismatch = (a) => {
+    if (!a.date || !a.shift) return null;
+    const entry = rosterData[a.date.slice(0, 7)]?.[a.date];
+    const currentShift = entry?.shiftInfo?.label;
+    if (!currentShift || entry?.shiftInfo?.off || currentShift === a.shift) return null;
+    return currentShift;
+  };
 
   return (
     <div>
@@ -3952,6 +4029,7 @@ function MobileHome({ user, setScreen }) {
       </div>
 
       <div className="m-section-title">My Submissions</div>
+      {cancelMsg && <div className="m-alert m-alert-ok">{cancelMsg}</div>}
       <div className="m-card">
         {loading ? (
           <div className="m-card-pad" style={{ textAlign: "center", color: "var(--m-muted)" }}>Loading…</div>
@@ -3961,26 +4039,49 @@ function MobileHome({ user, setScreen }) {
           </div>
         ) : (
           <div>
-            {apps.slice(0, 20).map(a => (
-              <div
-                key={a.id}
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${"var(--m-border)"}` }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{a.date}</div>
-                  <div style={{ fontSize: 12, color: "var(--m-muted)" }}>
-                    {a.shift}{a.dinnerMeal ? ` · 🍽 ${a.dinnerMeal}` : ""}
+            {apps.slice(0, 20).map(a => {
+              const newShift = rosterMismatch(a);
+              return (
+                <div key={a.id} style={{ padding: "12px 16px", borderBottom: `1px solid ${"var(--m-border)"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{a.date}</div>
+                      <div style={{ fontSize: 12, color: "var(--m-muted)" }}>
+                        {a.shift}{a.dinnerMeal ? ` · 🍽 ${a.dinnerMeal}` : ""}
+                      </div>
+                    </div>
+                    <span
+                      className="m-badge"
+                      style={{
+                        background: a.pickDrop === "PICK" ? C.greenLight : a.pickDrop === "DINNER_ONLY" ? C.purpleLight : C.orangeLight,
+                        color: a.pickDrop === "PICK" ? C.green : a.pickDrop === "DINNER_ONLY" ? C.purple : C.orange,
+                      }}>
+                      {a.pickDrop === "DINNER_ONLY" ? "🍽 Dinner" : a.pickDrop}
+                    </span>
+                  </div>
+                  {newShift && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: C.orange, fontWeight: 600 }}>
+                      ⚠ Roster now shows {newShift} for this date — cancel and resubmit to match.
+                    </div>
+                  )}
+                  <div style={{ marginTop: 8 }}>
+                    {confirmCancel === a.id ? (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: C.red, fontWeight: 700 }}>Cancel this request?</span>
+                        <button onClick={() => cancelApp(a.id)} style={{ background: C.red, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 12 }}>Yes</button>
+                        <button onClick={() => setConfirmCancel(null)} style={{ background: "none", border: "none", color: "var(--m-muted)", fontWeight: 700, fontSize: 12 }}>No</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setConfirmCancel(a.id); setCancelMsg(null); }}
+                        style={{ background: "none", border: "none", color: C.red, fontWeight: 600, fontSize: 12, padding: 0, display: "flex", alignItems: "center", gap: 4 }}>
+                        <Ico n="trash" s={12} c={C.red} /> Cancel request
+                      </button>
+                    )}
                   </div>
                 </div>
-                <span
-                  className="m-badge"
-                  style={{
-                    background: a.pickDrop === "PICK" ? C.greenLight : a.pickDrop === "DINNER_ONLY" ? C.purpleLight : C.orangeLight,
-                    color: a.pickDrop === "PICK" ? C.green : a.pickDrop === "DINNER_ONLY" ? C.purple : C.orange,
-                  }}>
-                  {a.pickDrop === "DINNER_ONLY" ? "🍽 Dinner" : a.pickDrop}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -4155,7 +4256,7 @@ function MobileTransportForm({ user, onDone }) {
         {(submittedForm.wantsDinner || submittedForm.isDinnerOnly) && submittedForm.dinnerMeal && (
           <div style={{ fontSize: 13, color: "var(--m-muted)", marginBottom: 8 }}>Dinner: <b style={{ color: "var(--m-text)" }}>{submittedForm.dinnerMeal}</b></div>
         )}
-        <button className="m-submit-btn" style={{ margin: "18px 0 0" }} onClick={() => { reset(); onDone(); }}>Back to Home</button>
+        <button className="m-submit-btn" style={{ width: "100%", margin: "18px 0 0" }} onClick={() => { reset(); onDone(); }}>Back to Home</button>
         <div style={{ marginTop: 12 }}>
           <button onClick={reset} style={{ background: "none", border: "none", color: C.cyan, fontWeight: 700, fontSize: 13 }}>Submit Another</button>
         </div>
@@ -4461,7 +4562,7 @@ function MobileRoster({ user, onUserUpdate }) {
           </select>
         </div>
         {msg && <div className={`m-alert m-alert-${msg.t === "err" ? "err" : "ok"}`} style={{ margin: "0 0 12px" }}>{msg.m}</div>}
-        <button className="m-submit-btn" style={{ background: C.cyan, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => fileRef.current?.click()}>
+        <button className="m-submit-btn" style={{ width: "100%", margin: 0, background: C.cyan, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => fileRef.current?.click()}>
           <Ico n="upload" s={16} c="#fff" />Upload Roster Excel
         </button>
         <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={e => processFile(e.target.files[0])} />
@@ -4597,7 +4698,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
       <div className="m-card"><div className="m-card-pad">
         <label className="m-label">Contact Number</label>
         <input className="m-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+94 77 000 0000" style={{ marginBottom: 10 }} />
-        <button className="m-submit-btn" onClick={savePhone}>Save Number</button>
+        <button className="m-submit-btn" style={{ width: "100%", margin: 0 }} onClick={savePhone}>Save Number</button>
       </div></div>
 
       <div className="m-card"><div className="m-card-pad">
@@ -4674,7 +4775,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
             <input className="m-input" type="password" placeholder="Current password" value={curPw} onChange={e => setCurPw(e.target.value)} />
             <input className="m-input" type="password" placeholder="New password" value={newPw} onChange={e => setNewPw(e.target.value)} />
             <input className="m-input" type="password" placeholder="Confirm new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
-            <button className="m-submit-btn" style={{ margin: "6px 0 0" }} disabled={pwLoading} onClick={changePassword}>
+            <button className="m-submit-btn" style={{ width: "100%", margin: "6px 0 0" }} disabled={pwLoading} onClick={changePassword}>
               {pwLoading ? "Sending code…" : "Change Password"}
             </button>
           </div>
@@ -4684,7 +4785,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
               className="m-input" placeholder="6-digit code" maxLength={6} value={pwOtp}
               onChange={e => setPwOtp(e.target.value.replace(/\D/g, ""))}
               style={{ textAlign: "center", fontSize: 20, letterSpacing: 6 }} />
-            <button className="m-submit-btn" style={{ margin: "6px 0 0" }} disabled={pwLoading} onClick={verifyPwOtp}>
+            <button className="m-submit-btn" style={{ width: "100%", margin: "6px 0 0" }} disabled={pwLoading} onClick={verifyPwOtp}>
               {pwLoading ? "Verifying…" : "Confirm Change"}
             </button>
             <button onClick={() => { setPwStep("form"); setPwMsg(null); }} style={{ background: "none", border: "none", color: "var(--m-muted)", fontSize: 12, fontWeight: 700, padding: 8 }}>← Back</button>
@@ -4693,7 +4794,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
       </div></div>
 
       <div style={{ padding: "0 16px 24px" }}>
-        <button className="m-submit-btn m-submit-btn-red" style={{ margin: 0 }} onClick={onLogout}>Sign Out</button>
+        <button className="m-submit-btn m-submit-btn-red" style={{ width: "100%", margin: 0 }} onClick={onLogout}>Sign Out</button>
       </div>
       <div className="m-copyright">© 2026 SACI. All Rights Reserved.</div>
     </div>
