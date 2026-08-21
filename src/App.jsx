@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import emailjs from "@emailjs/browser";
 import bcrypt from "bcryptjs";
+import { createClient } from "@supabase/supabase-js";
 
 // ─── EmailJS config ───────────────────────────────────────────────────────────
 const EMAILJS_SERVICE_ID  = "service_bq4x4x5";
@@ -17,6 +18,22 @@ const HEADERS = {
   "apikey": SUPA_ANON,
   "Authorization": `Bearer ${SUPA_ANON}`,
 };
+
+// ─── Supabase JS client (Phase 3+) ───────────────────────────────────────────
+// Used for Supabase Auth (this file), and eventually (Phase 4, not yet
+// built) for every other DB call, replacing the raw REST supa() helper
+// above. Safe to use the public anon key here — once RLS is enabled
+// (a later step, not yet live), every query this client makes is
+// automatically scoped to whoever's actually signed in.
+const supabase = createClient(SUPA_URL, SUPA_ANON);
+
+// Supabase Auth needs an email-shaped identifier even though the app logs
+// in by Employee ID. This is never shown to the user and is unrelated to
+// their real contact email (the `email` column on cc_users) — it only
+// exists so Supabase Auth has something to key on. Must match the same
+// function in api/login.js and api/password-reset.js exactly.
+const AUTH_EMAIL_DOMAIN = "transithub.internal";
+const authEmailFor = (empId) => `${empId.toLowerCase()}@${AUTH_EMAIL_DOMAIN}`;
 
 // ─── Password helpers ─────────────────────────────────────────────────────────
 const BCRYPT_ROUNDS = 10;
@@ -156,10 +173,14 @@ const supa = async (method, table, { filter = "", body = null, single = false } 
 };
 
 // ─── Session ──────────────────────────────────────────────────────────────────
+// FIX (Phase 3): the old custom localStorage session object is retired —
+// supabase.auth (see the client setup above) now owns session persistence
+// entirely. Left as a no-op stub rather than deleted outright, in case any
+// stray reference survives elsewhere in the file.
 const Session = {
-  get: () => { try { return JSON.parse(localStorage.getItem("cc_session")); } catch { return null; } },
-  set: (v) => localStorage.setItem("cc_session", JSON.stringify(v)),
-  clear: () => localStorage.removeItem("cc_session"),
+  get: () => null,
+  set: () => {},
+  clear: () => {},
 };
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -776,7 +797,6 @@ function AuthScreen({ onLogin }) {
   // FIX: forgot-password flow state
   const [fgStep, setFgStep] = useState("request"); // request | verify | done
   const [fgEmpId, setFgEmpId] = useState("");
-  const [fgUser, setFgUser] = useState(null);
   const [fgOtp, setFgOtp] = useState("");
   const [fgNewPw, setFgNewPw] = useState("");
   const [fgConfirmPw, setFgConfirmPw] = useState("");
@@ -793,8 +813,11 @@ function AuthScreen({ onLogin }) {
   useEffect(() => {
     if (!f.empId || f.empId.length < 2) { setIsWhitelisted(false); return; }
     const timer = setTimeout(async () => {
-      const list = await DB.getAdminWhitelist();
-      setIsWhitelisted(list.map(x => x.toLowerCase()).includes(f.empId.toLowerCase()));
+      // FIX (Phase 3): uses the check_emp_id_status() DB function instead of
+      // reading cc_settings directly — it never exposes the whole whitelist
+      // to the browser, just a yes/no for this one Employee ID.
+      const { data } = await supabase.rpc("check_emp_id_status", { p_emp_id: f.empId });
+      setIsWhitelisted(data?.[0]?.is_whitelisted || false);
     }, 400);
     return () => clearTimeout(timer);
   }, [f.empId]);
@@ -807,17 +830,21 @@ function AuthScreen({ onLogin }) {
     if (f.password.length < 4) return setMsg({ t: "err", m: "Password must be at least 4 characters." });
     setLoading(true);
     try {
-      const existing = await DB.getUserByEmpId(f.empId);
-      if (existing) { setLoading(false); return setMsg({ t: "err", m: "Employee ID already registered." }); }
+      // FIX (Phase 3): existence check now goes through check_emp_id_status()
+      // instead of a direct row read, consistent with the whitelist check above.
+      const { data: statusRows } = await supabase.rpc("check_emp_id_status", { p_emp_id: f.empId });
+      if (statusRows?.[0]?.exists_already) { setLoading(false); return setMsg({ t: "err", m: "Employee ID already registered." }); }
       // FIX: send OTP to email before creating account
       const code = String(Math.floor(100000 + Math.random() * 900000));
       const expiry = Date.now() + 10 * 60 * 1000;
       await sendOtpEmail(f.email, f.name, code);
-      const hashedPassword = await hashPw(f.password);
+      // FIX (Phase 3): no more bcrypt hashing here — the actual account
+      // creation (verifyRegOtp, below) hands this plaintext password
+      // straight to supabase.auth.signUp(), which does its own hashing.
+      // Held only in memory for the few minutes between "code sent" and
+      // "code verified", never written anywhere until then.
       setRegPending({
-        id: uid(), name: f.name, empId: f.empId, phone: f.phone, email: f.email,
-        password: hashedPassword,
-        role: isWhitelisted ? "admin" : "employee", addresses: [], rosterData: {}, createdAt: todayStr()
+        name: f.name, empId: f.empId, phone: f.phone, email: f.email, password: f.password,
       });
       setRegOtpCode(code);
       setRegOtpExpiry(expiry);
@@ -837,7 +864,35 @@ function AuthScreen({ onLogin }) {
     if (Date.now() > regOtpExpiry) return setMsg({ t: "err", m: "Code expired. Please go back and try again." });
     setLoading(true);
     try {
-      await DB.createUser(regPending);
+      // FIX (Phase 3): creates the real Supabase Auth account directly from
+      // the browser — signUp() is a public, anon-key-safe operation by
+      // design (unlike login/password-reset, it needs no service-role
+      // server hop). Requires "Confirm email" to be OFF in Supabase Auth
+      // settings, since authEmail is a synthetic address that can't
+      // receive a real confirmation link.
+      const authEmail = authEmailFor(regPending.empId);
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+        email: authEmail,
+        password: regPending.password,
+      });
+      if (signUpErr) { setLoading(false); return setMsg({ t: "err", m: "Failed to create account: " + signUpErr.message }); }
+
+      // The row insert below is checked by RLS's "auth_id = auth.uid()"
+      // policy — signUp() already leaves us signed in as the new user
+      // (assuming email confirmation is disabled), so this satisfies it.
+      const { error: insertErr } = await supabase.from("cc_users").insert({
+        auth_id: signUpData.user.id,
+        name: regPending.name,
+        emp_id: regPending.empId,
+        phone: regPending.phone || "",
+        email: regPending.email,
+        addresses: [], roster_data: {}, created_at: todayStr(),
+        last_active: new Date().toISOString(),
+        // role intentionally omitted — the enforce_cc_users_role trigger
+        // decides it server-side from the whitelist, never trusts the client.
+      });
+      if (insertErr) { setLoading(false); return setMsg({ t: "err", m: "Failed to create account: " + insertErr.message }); }
+
       setLoading(false);
       setMsg({ t: "ok", m: "Account created! Sign in below." });
       setMode("login");
@@ -876,28 +931,54 @@ function AuthScreen({ onLogin }) {
     }
     setLoading(true);
     try {
-      const raw = await DB.getUserByEmpId(f.empId);
-      if (!raw) {
-        LockoutStore.recordFail(f.empId);
+      const authEmail = authEmailFor(f.empId);
+
+      // FIX (Phase 3): try the real Supabase Auth sign-in first — the fast
+      // path for anyone already migrated, no server hop needed.
+      let { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+        email: authEmail, password: f.password,
+      });
+
+      // Not migrated yet (or genuinely wrong password) — bridge through the
+      // legacy check in api/login.js, which also completes the migration
+      // (creates the Auth account) if the old password is correct.
+      if (signInErr) {
+        const bridgeRes = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ empId: f.empId, password: f.password }),
+        });
+        const bridgeData = await bridgeRes.json().catch(() => ({}));
+        if (!bridgeRes.ok) {
+          const attempts = LockoutStore.recordFail(f.empId);
+          const remaining = MAX_ATTEMPTS - attempts;
+          setLoading(false);
+          if (remaining <= 0) return setMsg({ t: "err", m: `Too many failed attempts. Account locked for 15 minutes.` });
+          return setMsg({ t: "err", m: `Invalid Employee ID or password. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.` });
+        }
+        // Bridge succeeded — the Auth account now exists, retry the real sign-in.
+        ({ data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+          email: authEmail, password: f.password,
+        }));
+        if (signInErr) {
+          setLoading(false);
+          return setMsg({ t: "err", m: "Login failed: " + signInErr.message });
+        }
+      }
+
+      // Success — load their app profile row via the linked auth_id.
+      const { data: profile, error: profileErr } = await supabase
+        .from("cc_users")
+        .select("*")
+        .eq("auth_id", signInData.user.id)
+        .maybeSingle();
+      if (profileErr || !profile) {
         setLoading(false);
-        return setMsg({ t: "err", m: "Invalid Employee ID or password." });
+        return setMsg({ t: "err", m: "Signed in, but couldn't load your profile. Contact your Admin." });
       }
-      const { ok, needsMigration } = await verifyPw(f.password, raw.password);
-      if (!ok) {
-        const attempts = LockoutStore.recordFail(f.empId);
-        const remaining = MAX_ATTEMPTS - attempts;
-        setLoading(false);
-        if (remaining <= 0) return setMsg({ t: "err", m: `Too many failed attempts. Account locked for 15 minutes.` });
-        return setMsg({ t: "err", m: `Invalid Employee ID or password. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.` });
-      }
-      // FIX: auto-migrate plain-text password to bcrypt hash on first successful login
-      if (needsMigration) {
-        const hashed = await hashPw(f.password);
-        await DB.setPassword(raw.id, hashed);
-      }
+
       LockoutStore.clear(f.empId); // FIX: clear lockout on successful login
-      const user = userFromDb(raw);
-      Session.set({ userId: user.id });
+      const user = userFromDb(profile);
       DB.touchActivity(user.id);
       setLoading(false);
       onLogin(user);
@@ -910,7 +991,7 @@ function AuthScreen({ onLogin }) {
   // FIX: forgot-password handlers
   const switchToForgot = () => {
     setMode("forgot"); setMsg(null);
-    setFgStep("request"); setFgEmpId(""); setFgUser(null);
+    setFgStep("request"); setFgEmpId("");
     setFgOtp(""); setFgNewPw(""); setFgConfirmPw(""); setFgMsg(null);
     setResendCooldown(0);
   };
@@ -931,20 +1012,22 @@ function AuthScreen({ onLogin }) {
     if (!fgEmpId) return setFgMsg({ t: "err", m: "Enter your Employee ID." });
     setFgLoading(true);
     try {
-      const raw = await DB.getUserByEmpId(fgEmpId);
-      if (!raw) { setFgLoading(false); return setFgMsg({ t: "err", m: "No account found with that Employee ID." }); }
-      if (!raw.email) {
+      // FIX (Phase 3): moved server-side — reading a stranger's email
+      // before they have a session is exactly what RLS is meant to block,
+      // so this can no longer happen as a direct client-side DB read.
+      const res = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step: "request", empId: fgEmpId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
         setFgLoading(false);
-        return setFgMsg({ t: "err", m: "No email is on file for this account. Please ask your Admin/Team Leader to reset your password instead." });
+        return setFgMsg({ t: "err", m: data.error || "Could not send code." });
       }
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-      await DB.setResetOtp(raw.id, code, expires);
-      await sendOtpEmail(raw.email, raw.name, code);
-      setFgUser(raw);
       setFgStep("verify");
       setResendCooldown(30);
-      setFgMsg({ t: "ok", m: `Code sent to ${maskEmail(raw.email)}. Check your inbox (and spam folder) — it's valid for 10 minutes.` });
+      setFgMsg({ t: "ok", m: `Code sent to ${data.maskedEmail}. Check your inbox (and spam folder) — it's valid for 10 minutes.` });
     } catch (e) {
       setFgMsg({ t: "err", m: "Could not send code: " + e.message });
     }
@@ -952,13 +1035,19 @@ function AuthScreen({ onLogin }) {
   };
 
   const resendCode = async () => {
-    if (resendCooldown > 0 || !fgUser) return;
+    if (resendCooldown > 0 || !fgEmpId) return;
     setFgLoading(true);
     try {
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-      await DB.setResetOtp(fgUser.id, code, expires);
-      await sendOtpEmail(fgUser.email, fgUser.name, code);
+      const res = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step: "request", empId: fgEmpId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFgLoading(false);
+        return setFgMsg({ t: "err", m: data.error || "Could not resend." });
+      }
       setResendCooldown(30);
       setFgMsg({ t: "ok", m: "New code sent." });
     } catch (e) {
@@ -974,13 +1063,19 @@ function AuthScreen({ onLogin }) {
     if (fgNewPw !== fgConfirmPw) return setFgMsg({ t: "err", m: "Passwords do not match." });
     setFgLoading(true);
     try {
-      const fresh = await DB.getUserByEmpId(fgEmpId); // re-check the latest OTP straight from the DB
-      if (!fresh || !fresh.reset_otp) { setFgLoading(false); return setFgMsg({ t: "err", m: "Code expired or not found. Please request a new one." }); }
-      if (fresh.reset_otp !== fgOtp) { setFgLoading(false); return setFgMsg({ t: "err", m: "Incorrect code." }); }
-      if (new Date(fresh.reset_otp_expires).getTime() < Date.now()) { setFgLoading(false); return setFgMsg({ t: "err", m: "Code expired. Please request a new one." }); }
-      // FIX: hash new password before saving
-      const hashed = await hashPw(fgNewPw);
-      await DB.setPassword(fresh.id, hashed);
+      // FIX (Phase 3): server-side verify + set, via api/password-reset.js.
+      // Also updates/creates the linked Supabase Auth account with the new
+      // password, so the very next sign-in works immediately.
+      const res = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step: "verify", empId: fgEmpId, otp: fgOtp, newPassword: fgNewPw }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFgLoading(false);
+        return setFgMsg({ t: "err", m: data.error || "Failed to reset password." });
+      }
       setFgStep("done");
       setFgMsg(null);
     } catch (e) {
@@ -4992,10 +5087,18 @@ export default function App() {
     (async () => {
       try {
         await DB.seedAdmin();
-        const s = Session.get();
-        if (s?.userId) {
-          const raw = await DB.getUserById(s.userId);
-          if (raw) setUser(userFromDb(raw));
+        // FIX (Phase 3): session restoration now goes through Supabase
+        // Auth's own persisted session instead of the old custom
+        // localStorage Session object — supabase-js handles keeping this
+        // in sync across tabs/reloads on its own.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from("cc_users")
+            .select("*")
+            .eq("auth_id", session.user.id)
+            .maybeSingle();
+          if (profile) setUser(userFromDb(profile));
         }
         clearTimeout(timer);
         finish();
@@ -5027,7 +5130,9 @@ export default function App() {
     };
   }, []);
 
-  const logout = () => { Session.set({}); setUser(null); };
+  // FIX (Phase 3): signs out of the real Supabase Auth session, not just
+  // the old custom localStorage flag.
+  const logout = () => { supabase.auth.signOut(); setUser(null); };
 
   if (booting) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0D3D56" }}>
