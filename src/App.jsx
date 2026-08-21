@@ -881,6 +881,7 @@ function AuthScreen({ onLogin }) {
       // policy — signUp() already leaves us signed in as the new user
       // (assuming email confirmation is disabled), so this satisfies it.
       const { error: insertErr } = await supabase.from("cc_users").insert({
+        id: uid(), // FIX: was missing — cc_users.id has no default, must be supplied
         auth_id: signUpData.user.id,
         name: regPending.name,
         emp_id: regPending.empId,
