@@ -13,7 +13,9 @@
     "react-dom": "^18.2.0",
     "xlsx": "^0.18.5",
     "@emailjs/browser": "^4.3.3",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+     "@supabase/supabase-js": "^2.112.3",
+    "@emailjs/nodejs": "^5.0.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
