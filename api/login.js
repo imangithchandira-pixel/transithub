@@ -52,7 +52,14 @@ export default async function handler(req, res) {
       .eq("emp_id", empId)
       .maybeSingle();
 
-    if (error || !user) {
+    // FIX: distinguish a real Supabase/connection error from a genuine
+    // "no such Employee ID" — these were previously conflated into the same
+    // generic message, which makes a broken SUPA_URL/service-role key
+    // indistinguishable from a real wrong-password attempt.
+    if (error) {
+      return res.status(500).json({ error: "Database error: " + error.message });
+    }
+    if (!user) {
       return res.status(401).json({ error: "Invalid Employee ID or password" });
     }
 
