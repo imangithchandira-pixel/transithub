@@ -594,14 +594,14 @@ const buildCSS = () => `@import url('https://fonts.googleapis.com/css2?family=Pl
  .auth-stat-num{color:#fff;font-size:22px;font-weight:800}
  .auth-stat-lbl{color:rgba(255,255,255,.5);font-size:11px;font-weight:600;margin-top:2px}
  .auth-route-svg{position:absolute;left:-10%;right:-10%;bottom:-10px;width:120%;height:160px;z-index:1}
- .auth-panel{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 24px;background:${C.ice}}
+ .auth-panel{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 24px;background:#F0F9FF}
  .auth-card{width:100%;max-width:380px}
  .auth-mobile-brand{display:none}
  .auth-form-wrap{background:#fff;border-radius:20px;box-shadow:0 10px 40px rgba(13,61,86,.12);padding:32px}
- .auth-title{font-size:21px;font-weight:800;color:${C.text};margin-bottom:4px}
- .auth-desc{font-size:13px;color:${C.muted};margin-bottom:22px;line-height:1.5}
- .auth-seg{display:flex;background:${C.grey0};border-radius:12px;padding:4px;margin-bottom:20px;border:1px solid ${C.grey1}}
- .auth-seg-btn{flex:1;padding:10px;border-radius:9px;border:none;background:transparent;font-weight:600;font-size:13px;color:${C.muted};cursor:pointer;transition:all .15s}
+ .auth-title{font-size:21px;font-weight:800;color:#1E293B;margin-bottom:4px}
+ .auth-desc{font-size:13px;color:#64748B;margin-bottom:22px;line-height:1.5}
+ .auth-seg{display:flex;background:#F8FAFC;border-radius:12px;padding:4px;margin-bottom:20px;border:1px solid #E2E8F0}
+ .auth-seg-btn{flex:1;padding:10px;border-radius:9px;border:none;background:transparent;font-weight:600;font-size:13px;color:#64748B;cursor:pointer;transition:all .15s}
  .auth-seg-btn.active{background:${C.cyan};color:#fff;box-shadow:0 3px 10px rgba(0,180,216,.35)}
  @media(max-width:900px){.auth-brand{display:none} .auth-mobile-brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:22px} .auth-panel{padding:32px 18px}}
  ::-webkit-scrollbar{width:5px;height:5px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px}
@@ -1135,7 +1135,7 @@ function AuthScreen({ onLogin }) {
             <Ico n="bus" s={22} c={C.cyan} />
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, color: C.deepTeal }}>TransitHub</div>
-              <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: ".08em" }}>Contact Center Transport</div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#64748B", textTransform: "uppercase", letterSpacing: ".08em" }}>Contact Center Transport</div>
             </div>
           </div>
 
@@ -1182,7 +1182,7 @@ function AuthScreen({ onLogin }) {
               <div>
                 <label className="label">Email<span className="req">*</span></label>
                 <input className="input" type="email" placeholder="yourname@mobitel.lk" value={f.email} onChange={upd("email")} />
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Must be your @mobitel.lk company email. Used for verification.</div>
+                <div style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>Must be your @mobitel.lk company email. Used for verification.</div>
               </div>
               <div><label className="label">Password<span className="req">*</span></label><input className="input" type="password" placeholder="••••••••" value={f.password} onChange={upd("password")} /></div>
               <div><label className="label">Confirm Password<span className="req">*</span></label><input className="input" type="password" placeholder="••••••••" value={f.confirm} onChange={upd("confirm")} /></div>
@@ -1195,7 +1195,7 @@ function AuthScreen({ onLogin }) {
               <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
                 <div style={{ fontSize: 32, marginBottom: 6 }}>📧</div>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Verify your email</div>
-                <div style={{ fontSize: 12, color: C.muted }}>Enter the 6-digit code sent to <b>{maskEmail(f.email)}</b></div>
+                <div style={{ fontSize: 12, color: "#64748B" }}>Enter the 6-digit code sent to <b>{maskEmail(f.email)}</b></div>
               </div>
               <div>
                 <label className="label">Verification Code</label>
@@ -1209,13 +1209,13 @@ function AuthScreen({ onLogin }) {
               </button>
               <div style={{ textAlign: "center" }}>
                 <button onClick={resendRegOtp} disabled={regResendCD > 0 || loading}
-                  style={{ background: "none", border: "none", cursor: regResendCD > 0 ? "default" : "pointer", color: regResendCD > 0 ? C.muted : C.cyan, fontSize: 12, fontWeight: 700 }}>
+                  style={{ background: "none", border: "none", cursor: regResendCD > 0 ? "default" : "pointer", color: regResendCD > 0 ? "#64748B" : C.cyan, fontSize: 12, fontWeight: 700 }}>
                   {regResendCD > 0 ? `Resend code in ${regResendCD}s` : "Resend code"}
                 </button>
               </div>
               <div style={{ textAlign: "center" }}>
                 <button onClick={() => { setRegStep("form"); setMsg(null); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 12, fontWeight: 700 }}>
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#64748B", fontSize: 12, fontWeight: 700 }}>
                   ← Back to form
                 </button>
               </div>
@@ -1241,7 +1241,7 @@ function AuthScreen({ onLogin }) {
                   <div><label className="label">Confirm New Password</label><input className="input" type="password" placeholder="••••••••" value={fgConfirmPw} onChange={e => setFgConfirmPw(e.target.value)} onKeyDown={e => e.key === "Enter" && verifyAndReset()} /></div>
                   <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12, marginTop: 4 }} onClick={verifyAndReset} disabled={fgLoading}>{fgLoading ? "Resetting…" : "Reset Password"}</button>
                   <div style={{ textAlign: "center" }}>
-                    <button onClick={resendCode} disabled={resendCooldown > 0 || fgLoading} style={{ background: "none", border: "none", cursor: resendCooldown > 0 ? "default" : "pointer", color: resendCooldown > 0 ? C.muted : C.cyan, fontSize: 12, fontWeight: 700 }}>
+                    <button onClick={resendCode} disabled={resendCooldown > 0 || fgLoading} style={{ background: "none", border: "none", cursor: resendCooldown > 0 ? "default" : "pointer", color: resendCooldown > 0 ? "#64748B" : C.cyan, fontSize: 12, fontWeight: 700 }}>
                       {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
                     </button>
                   </div>
@@ -1254,12 +1254,12 @@ function AuthScreen({ onLogin }) {
                     <Ico n="check" s={26} c={C.green} />
                   </div>
                   <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Password updated!</div>
-                  <div style={{ fontSize: 13, color: C.muted }}>You can now sign in with your new password.</div>
+                  <div style={{ fontSize: 13, color: "#64748B" }}>You can now sign in with your new password.</div>
                 </div>
               )}
 
               <div style={{ textAlign: "center", marginTop: 4 }}>
-                <button onClick={backToLogin} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 12, fontWeight: 700 }}>← Back to Sign In</button>
+                <button onClick={backToLogin} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748B", fontSize: 12, fontWeight: 700 }}>← Back to Sign In</button>
               </div>
             </div>
           )}
@@ -5070,11 +5070,16 @@ export default function App() {
   const [, forceThemeRerender] = useState(0);
 
   useEffect(() => {
-    // Apply any saved desktop theme before the first stylesheet is built, so
-    // there's no flash of the wrong palette on load.
-    const savedTheme = getSavedDesktopTheme();
-    if (savedTheme === "dark") Object.assign(C, DARK_SURFACE);
-
+    // FIX: dark mode is now only ever applied once we know someone's
+    // actually logged in — previously this ran unconditionally at boot,
+    // before knowing whether anyone was authenticated, which meant a saved
+    // dark-mode preference leaked onto the logged-out AuthScreen (which was
+    // never designed to render in anything but light mode — its card
+    // background is hardcoded white, so dark-mode text colors on it were
+    // nearly invisible). The stylesheet now always starts in light mode;
+    // dark mode is applied inside the session-restore block below instead,
+    // in the same tick as setUser(), so there's still no visible flash for
+    // an already-logged-in user reloading the page.
     const el = document.createElement("style");
     el.id = "th-desktop-style";
     el.textContent = buildCSS();
@@ -5107,7 +5112,16 @@ export default function App() {
             .select("*")
             .eq("auth_id", session.user.id)
             .maybeSingle();
-          if (profile) setUser(userFromDb(profile));
+          if (profile) {
+            // FIX: apply the saved theme only now that we know this is a
+            // real, logged-in session — see comment above.
+            const savedTheme = getSavedDesktopTheme();
+            if (savedTheme === "dark") {
+              Object.assign(C, DARK_SURFACE);
+              if (el) el.textContent = buildCSS();
+            }
+            setUser(userFromDb(profile));
+          }
         }
         clearTimeout(timer);
         finish();
@@ -5141,7 +5155,16 @@ export default function App() {
 
   // FIX (Phase 3): signs out of the real Supabase Auth session, not just
   // the old custom localStorage flag.
-  const logout = () => { supabase.auth.signOut(); setUser(null); };
+  // FIX: reset the theme to light on logout too — otherwise someone signing
+  // out of a dark-mode session lands back on AuthScreen still dark, without
+  // needing a full page reload to fix it.
+  const logout = () => {
+    supabase.auth.signOut();
+    Object.assign(C, LIGHT_SURFACE);
+    const el = document.getElementById("th-desktop-style");
+    if (el) el.textContent = buildCSS();
+    setUser(null);
+  };
 
   if (booting) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0D3D56" }}>
