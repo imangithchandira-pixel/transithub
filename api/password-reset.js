@@ -43,6 +43,7 @@ export default async function handler(req, res) {
   const { step, empId, otp, newPassword } = req.body || {};
 
   try {
+    // ─── Step 1: "request" — look up the account, email them a code ──────
     if (step === "request") {
       if (!empId) return res.status(400).json({ error: "Employee ID required" });
 
@@ -52,7 +53,14 @@ export default async function handler(req, res) {
         .eq("emp_id", empId)
         .maybeSingle();
 
-      if (error || !user) return res.status(404).json({ error: "No account found with that Employee ID." });
+      // Deliberately vague on "not found" vs "no email on file" would leak
+      // less, but this app's existing UX already distinguishes them, so we
+      // keep that behavior rather than changing product behavior as a
+      // side-effect of the security fix.
+      // FIX: same distinction as api/login.js — a real DB/connection error
+      // now surfaces differently from a genuine "no such account."
+      if (error) return res.status(500).json({ error: "Database error: " + error.message });
+      if (!user) return res.status(404).json({ error: "No account found with that Employee ID." });
       if (!user.email) return res.status(400).json({ error: "No email is on file for this account. Ask your Admin/Team Leader to reset it for you." });
 
       const code = genCode();
@@ -64,16 +72,25 @@ export default async function handler(req, res) {
         .eq("id", user.id);
       if (otpErr) return res.status(500).json({ error: "Could not start reset: " + otpErr.message });
 
-      await send(
-        process.env.EMAILJS_SERVICE_ID,
-        process.env.EMAILJS_TEMPLATE_ID,
-        { to_email: user.email, to_name: user.name, otp_code: code },
-        { publicKey: process.env.EMAILJS_PUBLIC_KEY, privateKey: process.env.EMAILJS_PRIVATE_KEY }
-      );
+      // FIX: wrap the EmailJS send specifically, since its errors don't
+      // always have a normal .message property — without this, a failure
+      // here surfaced as the unhelpful "Unexpected error: undefined".
+      try {
+        await send(
+          process.env.EMAILJS_SERVICE_ID,
+          process.env.EMAILJS_TEMPLATE_ID,
+          { to_email: user.email, to_name: user.name, otp_code: code },
+          { publicKey: process.env.EMAILJS_PUBLIC_KEY, privateKey: process.env.EMAILJS_PRIVATE_KEY }
+        );
+      } catch (emailErr) {
+        const detail = emailErr?.message || emailErr?.text || emailErr?.status || JSON.stringify(emailErr) || "unknown error";
+        return res.status(500).json({ error: "Could not send email: " + detail });
+      }
 
       return res.status(200).json({ ok: true, maskedEmail: maskEmail(user.email) });
     }
 
+    // ─── Step 2: "verify" — check the code, set the new password ─────────
     if (step === "verify") {
       if (!empId || !otp || !newPassword) return res.status(400).json({ error: "Missing fields" });
       if (newPassword.length < 4) return res.status(400).json({ error: "Password must be at least 4 characters." });
@@ -98,9 +115,12 @@ export default async function handler(req, res) {
       let authId = user.auth_id;
 
       if (authId) {
+        // Already has a Supabase Auth account — just change its password.
         const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(authId, { password: newPassword });
         if (updateErr) return res.status(500).json({ error: "Failed: " + updateErr.message });
       } else {
+        // Never logged in since the migration, so no Auth account exists
+        // yet — create it directly with the new password.
         const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email: authEmail,
           password: newPassword,
@@ -110,6 +130,8 @@ export default async function handler(req, res) {
         authId = created.user.id;
       }
 
+      // Clear the OTP and link auth_id, same "one write, both fields" shape
+      // as the old DB.setPassword helper.
       const { error: clearErr } = await supabaseAdmin
         .from("cc_users")
         .update({ auth_id: authId, reset_otp: null, reset_otp_expires: null })
@@ -121,6 +143,10 @@ export default async function handler(req, res) {
 
     return res.status(400).json({ error: "Unknown step" });
   } catch (e) {
-    return res.status(500).json({ error: "Unexpected error: " + e.message });
+    // FIX: fall back gracefully when the caught value doesn't have a normal
+    // .message (some SDKs throw plain objects/strings) — this is what was
+    // previously showing up as the unhelpful "Unexpected error: undefined".
+    const detail = e?.message || (typeof e === "string" ? e : JSON.stringify(e)) || "unknown error";
+    return res.status(500).json({ error: "Unexpected error: " + detail });
   }
 }
