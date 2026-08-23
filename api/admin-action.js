@@ -82,6 +82,9 @@ export default async function handler(req, res) {
       if (createErr) return res.status(500).json({ error: "Failed to create account: " + createErr.message });
 
       const { error: insertErr } = await supabaseAdmin.from("cc_users").insert({
+        // FIX: was missing an id — cc_users.id has no default, same bug
+        // caught earlier in the browser-side registration insert.
+        id: Math.random().toString(36).slice(2, 9),
         auth_id: created.user.id, name, emp_id: empId, phone: "", email: email || "",
         addresses: [], roster_data: {}, created_at: new Date().toISOString().split("T")[0],
         last_active: new Date().toISOString(),
