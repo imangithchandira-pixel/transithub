@@ -86,6 +86,16 @@ export default async function handler(req, res) {
         // caught earlier in the browser-side registration insert.
         id: Math.random().toString(36).slice(2, 9),
         auth_id: created.user.id, name, emp_id: empId, phone: "", email: email || "",
+        // FIX: set explicitly rather than relying on the whitelist-reading
+        // DB trigger (enforce_cc_users_role, from the Phase 1 SQL) — that
+        // trigger deliberately hasn't been applied yet (RLS/Phase 1 is
+        // still on hold until Phase 4 is fully tested), so nothing would
+        // have set this otherwise, and the account silently ended up as a
+        // plain employee. This endpoint has already independently verified
+        // the caller is a real admin (requireAdmin, above), so it's correct
+        // to set this directly — and once the trigger does exist later, the
+        // whitelist entry added just above keeps this consistent with it too.
+        role: "admin",
         addresses: [], roster_data: {}, created_at: new Date().toISOString().split("T")[0],
         last_active: new Date().toISOString(),
       });
