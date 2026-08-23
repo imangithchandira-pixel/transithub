@@ -35,6 +35,24 @@ const supabase = createClient(SUPA_URL, SUPA_ANON);
 const AUTH_EMAIL_DOMAIN = "transithub.internal";
 const authEmailFor = (empId) => `${empId.toLowerCase()}@${AUTH_EMAIL_DOMAIN}`;
 
+// FIX (Phase 4): shared helper for calling the admin-only serverless
+// endpoint — attaches the caller's own Supabase Auth access token, which
+// api/admin-action.js verifies server-side before doing anything (never
+// trusts a client-claimed role). Used by createAdmin and
+// resetEmployeePassword below, the two actions that modify someone else's
+// account and so can't safely happen straight from the browser.
+const callAdminAction = async (body) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch("/api/admin-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Request failed.");
+  return data;
+};
+
 // ─── Password helpers ─────────────────────────────────────────────────────────
 const BCRYPT_ROUNDS = 10;
 const isHashed    = (pw) => typeof pw === "string" && pw.startsWith("$2");
@@ -1718,16 +1736,22 @@ function ProfilePage({ user, onUpdate }) {
     return () => clearTimeout(t);
   }, [pwResendCD]);
 
+  // FIX (Phase 4): verifies the current password against the real Supabase
+  // Auth account instead of the old cc_users.password field — that field
+  // is now empty for anyone who registered after the Phase 3 rewrite
+  // (registration no longer writes it at all), so the old check would have
+  // wrongly rejected every correct password for those accounts.
   const changePassword = async () => {
     if (!curPw || !newPw || !confirmPw) return setPwMsg({ t: "err", m: "All fields are required." });
     if (newPw.length < 4) return setPwMsg({ t: "err", m: "New password must be at least 4 characters." });
     if (newPw !== confirmPw) return setPwMsg({ t: "err", m: "New passwords do not match." });
+    if (curPw === newPw) return setPwMsg({ t: "err", m: "New password must be different from the current one." });
     setPwLoading(true);
     try {
-      const { ok } = await verifyPw(curPw, user.password);
-      if (!ok) { setPwLoading(false); return setPwMsg({ t: "err", m: "Current password is incorrect." }); }
-      const { ok: sameAsCurrent } = await verifyPw(newPw, user.password);
-      if (sameAsCurrent) { setPwLoading(false); return setPwMsg({ t: "err", m: "New password must be different from the current one." }); }
+      const { error: verifyErr } = await supabase.auth.signInWithPassword({
+        email: authEmailFor(user.empId), password: curPw,
+      });
+      if (verifyErr) { setPwLoading(false); return setPwMsg({ t: "err", m: "Current password is incorrect." }); }
       if (!user.email) { setPwLoading(false); return setPwMsg({ t: "err", m: "No email on file — ask your Admin to reset your password." }); }
       // FIX: send OTP to their registered email before allowing password change
       const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -1747,15 +1771,18 @@ function ProfilePage({ user, onUpdate }) {
     setPwLoading(false);
   };
 
+  // FIX (Phase 4): updates the real Supabase Auth password directly — safe
+  // to do client-side since this is always the signed-in user changing
+  // their OWN password, unlike the admin-on-behalf-of-someone-else cases
+  // (which go through /api/admin-action.js instead).
   const verifyPwOtp = async () => {
     if (!pwOtp) return setPwMsg({ t: "err", m: "Enter the code sent to your email." });
     if (pwOtp !== pwOtpCode) return setPwMsg({ t: "err", m: "Incorrect code. Please try again." });
     if (Date.now() > pwOtpExpiry) return setPwMsg({ t: "err", m: "Code expired. Please start over." });
     setPwLoading(true);
     try {
-      const hashed = await hashPw(newPw);
-      await DB.setPassword(user.id, hashed);
-      onUpdate({ ...user, password: hashed });
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) { setPwLoading(false); return setPwMsg({ t: "err", m: "Failed: " + error.message }); }
       setCurPw(""); setNewPw(""); setConfirmPw(""); setPwOtp("");
       setPwStep("form");
       setPwMsg({ t: "ok", m: "Password changed successfully." });
@@ -3588,6 +3615,10 @@ function AdminDashboard({ user, onLogout }) {
     setConfirmDelete(null);
   };
 
+  // FIX (Phase 4): routed through the admin-action serverless endpoint —
+  // creating an account for someone else needs a matching Supabase Auth
+  // identity, which only a server holding the service-role key can safely
+  // create without disturbing the calling admin's own session.
   const createAdmin = async () => {
     if (!adminForm.name || !adminForm.empId || !adminForm.password)
       return setAdminMsg({ t: "err", m: "All fields are required." });
@@ -3595,16 +3626,15 @@ function AdminDashboard({ user, onLogout }) {
       return setAdminMsg({ t: "err", m: "Email must be a @mobitel.lk address." });
     setAdminLoading(true);
     try {
-      const existing = await DB.getUserByEmpId(adminForm.empId);
-      if (existing) { setAdminLoading(false); return setAdminMsg({ t: "err", m: "Employee ID already exists." }); }
-      const hashed = await hashPw(adminForm.password);
-      const newAdmin = {
-        id: uid(), name: adminForm.name, empId: adminForm.empId, password: hashed,
-        email: adminForm.email || "",
-        role: "admin", phone: "", addresses: [], rosterData: {}, createdAt: todayStr()
-      };
-      await DB.createUser(newAdmin);
-      setAdmins(prev => [newAdmin, ...prev]);
+      await callAdminAction({
+        action: "create_tl",
+        name: adminForm.name, empId: adminForm.empId,
+        password: adminForm.password, email: adminForm.email || "",
+      });
+      // Refresh from the DB rather than constructing a row locally — the
+      // real row now has fields (auth_id, etc.) this form doesn't know about.
+      const raw = await DB.getAdmins();
+      setAdmins(raw);
       setAdminForm({ name: "", empId: "", password: "", email: "" });
       setAdminMsg({ t: "ok", m: `Team Leader "${adminForm.name}" created successfully.` });
     } catch (e) {
@@ -3619,7 +3649,8 @@ function AdminDashboard({ user, onLogout }) {
     setConfirmDeleteAdmin(null);
   };
 
-  // FIX: admin can directly set a new password for an employee — no email/OTP needed.
+  // FIX (Phase 4): also routed through the admin-action endpoint now —
+  // resetting someone ELSE's password needs the same service-role access.
   // This is the fallback path when an employee's reset email never arrives.
   const resetEmployeePassword = async (u) => {
     if (!resetPwValue || resetPwValue.length < 4) {
@@ -3627,9 +3658,7 @@ function AdminDashboard({ user, onLogout }) {
       return;
     }
     try {
-      // FIX: hash before saving, same as all other password paths
-      const hashed = await hashPw(resetPwValue);
-      await DB.setPassword(u.id, hashed);
+      await callAdminAction({ action: "reset_password", targetUserId: u.id, newPassword: resetPwValue });
       setResetPwMsg({ t: "ok", m: `Password reset for ${u.name}.` });
       setResetPwUserId(null);
       setResetPwValue("");
@@ -4938,14 +4967,21 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
     onUpdate(updated);
   };
 
+  // FIX (Phase 4): same fixes as the desktop ProfilePage — verify against
+  // the real Supabase Auth password (the old cc_users.password field is
+  // empty for anyone who registered after Phase 3), and actually update
+  // the real Auth password on confirm, not just the legacy column.
   const changePassword = async () => {
     if (!curPw || !newPw || !confirmPw) return setPwMsg({ t: "err", m: "All fields are required." });
     if (newPw.length < 4) return setPwMsg({ t: "err", m: "New password must be at least 4 characters." });
     if (newPw !== confirmPw) return setPwMsg({ t: "err", m: "New passwords do not match." });
+    if (curPw === newPw) return setPwMsg({ t: "err", m: "New password must be different from the current one." });
     setPwLoading(true);
     try {
-      const { ok } = await verifyPw(curPw, user.password);
-      if (!ok) { setPwLoading(false); return setPwMsg({ t: "err", m: "Current password is incorrect." }); }
+      const { error: verifyErr } = await supabase.auth.signInWithPassword({
+        email: authEmailFor(user.empId), password: curPw,
+      });
+      if (verifyErr) { setPwLoading(false); return setPwMsg({ t: "err", m: "Current password is incorrect." }); }
       if (!user.email) { setPwLoading(false); return setPwMsg({ t: "err", m: "No email on file — ask your Admin to reset your password." }); }
       const code = String(Math.floor(100000 + Math.random() * 900000));
       const expiry = Date.now() + 10 * 60 * 1000;
@@ -4964,9 +5000,8 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
     if (Date.now() > pwOtpExpiry) return setPwMsg({ t: "err", m: "Code expired. Please start over." });
     setPwLoading(true);
     try {
-      const hashed = await hashPw(newPw);
-      await DB.setPassword(user.id, hashed);
-      onUpdate({ ...user, password: hashed });
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) { setPwLoading(false); return setPwMsg({ t: "err", m: "Failed: " + error.message }); }
       setCurPw(""); setNewPw(""); setConfirmPw(""); setPwOtp(""); setPwStep("form");
       setPwMsg({ t: "ok", m: "Password changed successfully." });
     } catch (e) {
