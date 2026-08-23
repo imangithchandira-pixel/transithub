@@ -219,66 +219,93 @@ const triggerDownload = (filename, dataUri) => {
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 const DB = {
   getUsers: async () => {
-    const d = await supa("GET", "cc_users", { filter: "select=*" });
-    return (d || []);
+    const { data, error } = await supabase.from("cc_users").select("*");
+    if (error) throw error;
+    return data || [];
   },
   getUserById: async (id) => {
-    const d = await supa("GET", "cc_users", { filter: `select=*&id=eq.${id}`, single: true });
-    return d;
+    const { data, error } = await supabase.from("cc_users").select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data;
   },
   getUserByEmpId: async (empId) => {
-    const d = await supa("GET", "cc_users", { filter: `select=*&emp_id=eq.${encodeURIComponent(empId)}`, single: true });
-    return d;
+    const { data, error } = await supabase.from("cc_users").select("*").eq("emp_id", empId).maybeSingle();
+    if (error) throw error;
+    return data;
   },
+  // FIX (Phase 4): still a direct client-side insert for now, which is fine
+  // while RLS is off — but this creates an account *for someone else* (the
+  // admin's "Create Team Leader" form), which needs a matching Supabase
+  // Auth identity too. That part can't safely happen from the browser
+  // (would sign the calling admin out and into the new account). This is
+  // the very next thing to move to a server-side admin endpoint, before
+  // RLS goes live — see the follow-up note in AdminDashboard's createAdmin.
   createUser: async (u) => {
-    await supa("POST", "cc_users", { body: dbUser(u) });
+    const { error } = await supabase.from("cc_users").insert(dbUser(u));
+    if (error) throw error;
   },
   updateUser: async (u) => {
-    await supa("PATCH", "cc_users", { filter: `id=eq.${u.id}`, body: dbUser(u) });
+    const { error } = await supabase.from("cc_users").update(dbUser(u)).eq("id", u.id);
+    if (error) throw error;
   },
   getApps: async () => {
-    const d = await supa("GET", "cc_apps", { filter: "select=*&order=submitted_at.desc" });
-    return (d || []).map(appFromDb);
+    const { data, error } = await supabase.from("cc_apps").select("*").order("submitted_at", { ascending: false });
+    if (error) throw error;
+    return (data || []).map(appFromDb);
   },
   getUserApps: async (userId) => {
-    const d = await supa("GET", "cc_apps", { filter: `select=*&user_id=eq.${userId}&order=submitted_at.desc` });
-    return (d || []).map(appFromDb);
+    const { data, error } = await supabase.from("cc_apps").select("*").eq("user_id", userId).order("submitted_at", { ascending: false });
+    if (error) throw error;
+    return (data || []).map(appFromDb);
   },
   createApp: async (a) => {
-    await supa("POST", "cc_apps", { body: dbApp(a) });
+    const { error } = await supabase.from("cc_apps").insert(dbApp(a));
+    if (error) throw error;
   },
   deleteApp: async (id) => {
-    await supa("DELETE", "cc_apps", { filter: `id=eq.${id}` });
+    const { error } = await supabase.from("cc_apps").delete().eq("id", id);
+    if (error) throw error;
   },
   updateApp: async (id, fields) => {
-    await supa("PATCH", "cc_apps", { filter: `id=eq.${id}`, body: fields });
+    const { error } = await supabase.from("cc_apps").update(fields).eq("id", id);
+    if (error) throw error;
   },
   getAdminWhitelist: async () => {
-    const d = await supa("GET", "cc_settings", { filter: "select=value&key=eq.admin_whitelist", single: true });
-    try { return JSON.parse(d?.value || "[]"); } catch { return []; }
+    const { data } = await supabase.from("cc_settings").select("value").eq("key", "admin_whitelist").maybeSingle();
+    try { return JSON.parse(data?.value || "[]"); } catch { return []; }
   },
   setAdminWhitelist: async (list) => {
-    await supa("POST", "cc_settings", { body: { key: "admin_whitelist", value: JSON.stringify(list) }, single: true });
+    const { error } = await supabase.from("cc_settings").upsert({ key: "admin_whitelist", value: JSON.stringify(list) }, { onConflict: "key" });
+    if (error) throw error;
   },
   getAdmins: async () => {
-    const d = await supa("GET", "cc_users", { filter: "select=*&role=eq.admin&order=created_at.desc" });
-    return (d || []).map(userFromDb);
+    const { data, error } = await supabase.from("cc_users").select("*").eq("role", "admin").order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data || []).map(userFromDb);
   },
-  // FIX: forgot-password OTP helpers
+  // FIX: forgot-password OTP helpers — unused now that api/password-reset.js
+  // handles this server-side (Phase 3), kept only in case anything else
+  // still references them.
   setResetOtp: async (id, code, expiresAt) => {
-    await supa("PATCH", "cc_users", { filter: `id=eq.${id}`, body: { reset_otp: code, reset_otp_expires: expiresAt } });
+    const { error } = await supabase.from("cc_users").update({ reset_otp: code, reset_otp_expires: expiresAt }).eq("id", id);
+    if (error) throw error;
   },
+  // FIX (Phase 4): same caveat as createUser above — setPassword is called
+  // both for a user changing their OWN password (fine to keep client-side)
+  // and for an admin resetting SOMEONE ELSE'S password (needs the same new
+  // server-side admin endpoint, for the same reason).
   setPassword: async (id, password) => {
-    // resets password and clears any pending OTP in one step
-    await supa("PATCH", "cc_users", { filter: `id=eq.${id}`, body: { password, reset_otp: null, reset_otp_expires: null } });
+    const { error } = await supabase.from("cc_users").update({ password, reset_otp: null, reset_otp_expires: null }).eq("id", id);
+    if (error) throw error;
   },
   deleteUser: async (id) => {
-    await supa("DELETE", "cc_users", { filter: `id=eq.${id}` });
+    const { error } = await supabase.from("cc_users").delete().eq("id", id);
+    if (error) throw error;
   },
   // FIX: lightweight activity timestamp update — used on login and on request submission
   touchActivity: async (id) => {
     try {
-      await supa("PATCH", "cc_users", { filter: `id=eq.${id}`, body: { last_active: new Date().toISOString() } });
+      await supabase.from("cc_users").update({ last_active: new Date().toISOString() }).eq("id", id);
     } catch (e) {
       console.warn("touchActivity failed:", e.message);
     }
@@ -303,7 +330,7 @@ const DB = {
         return new Date(ref).getTime() < cutoff;
       });
       for (const u of stale) {
-        await supa("DELETE", "cc_users", { filter: `id=eq.${u.id}` }).catch(() => {});
+        await supabase.from("cc_users").delete().eq("id", u.id).then(() => {}, () => {});
       }
       return stale.length;
     } catch (e) {
@@ -330,7 +357,7 @@ const DB = {
       const byDays = new Date(Date.now() - subDays * 24 * 60 * 60 * 1000);
       const submissionCutoff = byDays < floor ? byDays : floor;
       const submissionCutoffStr = submissionCutoff.toISOString().split("T")[0];
-      await supa("DELETE", "cc_apps", { filter: `date=lt.${submissionCutoffStr}` }).catch(() => {});
+      await supabase.from("cc_apps").delete().lt("date", submissionCutoffStr).then(() => {}, () => {});
 
       // 2. Strip roster months older than the retention window from every
       // user's roster_data (same current/previous-month floor).
@@ -345,10 +372,7 @@ const DB = {
         if (freshKeys.length < keys.length) {
           const trimmed = {};
           freshKeys.forEach(k => { trimmed[k] = rd[k]; });
-          await supa("PATCH", "cc_users", {
-            filter: `id=eq.${u.id}`,
-            body: { roster_data: trimmed }
-          }).catch(() => {});
+          await supabase.from("cc_users").update({ roster_data: trimmed }).eq("id", u.id).then(() => {}, () => {});
         }
       }
     } catch (e) {
@@ -358,84 +382,94 @@ const DB = {
   // FIX: configurable retention windows (days), stored the same way as the
   // submission cutoff times. Defaults preserve the original hardcoded values.
   getRetentionSettings: async () => {
-    const [inactive, submissions, roster, lastRun] = await Promise.all([
-      supa("GET", "cc_settings", { filter: "select=value&key=eq.retention_inactive_days", single: true }).catch(() => null),
-      supa("GET", "cc_settings", { filter: "select=value&key=eq.retention_submission_days", single: true }).catch(() => null),
-      supa("GET", "cc_settings", { filter: "select=value&key=eq.retention_roster_days", single: true }).catch(() => null),
-      supa("GET", "cc_settings", { filter: "select=value&key=eq.retention_last_run", single: true }).catch(() => null),
-    ]);
+    const { data } = await supabase
+      .from("cc_settings")
+      .select("key, value")
+      .in("key", ["retention_inactive_days", "retention_submission_days", "retention_roster_days", "retention_last_run"]);
+    const map = {};
+    (data || []).forEach(row => { map[row.key] = row.value; });
     return {
-      inactiveDays:    inactive?.value    || "30",
-      submissionDays:  submissions?.value || "90",
-      rosterDays:      roster?.value      || "60",
-      lastRun:         lastRun?.value     || null,
+      inactiveDays:    map.retention_inactive_days    || "30",
+      submissionDays:  map.retention_submission_days  || "90",
+      rosterDays:      map.retention_roster_days      || "60",
+      lastRun:         map.retention_last_run         || null,
     };
   },
   setRetentionSetting: async (key, days) => {
-    await supa("POST", "cc_settings", { body: { key: `retention_${key}`, value: String(days) }, single: true });
+    const { error } = await supabase.from("cc_settings").upsert({ key: `retention_${key}`, value: String(days) }, { onConflict: "key" });
+    if (error) throw error;
   },
   setRetentionLastRun: async () => {
-    await supa("POST", "cc_settings", { body: { key: "retention_last_run", value: new Date().toISOString() }, single: true });
+    const { error } = await supabase.from("cc_settings").upsert({ key: "retention_last_run", value: new Date().toISOString() }, { onConflict: "key" });
+    if (error) throw error;
   },
   getSetting: async (key) => {
-    const d = await supa("GET", "cc_settings", { filter: `select=value&key=eq.${key}`, single: true });
-    return d?.value;
+    const { data } = await supabase.from("cc_settings").select("value").eq("key", key).maybeSingle();
+    return data?.value;
   },
   setSetting: async (key, val) => {
-    await supa("POST", "cc_settings", { body: { key, value: val }, single: true });
+    const { error } = await supabase.from("cc_settings").upsert({ key, value: val }, { onConflict: "key" });
+    if (error) throw error;
   },
   // FIX: cutoff enforcement toggle — stored as "true"/"false" in cc_settings
   getCutoffEnabled: async () => {
-    const d = await supa("GET", "cc_settings", { filter: "select=value&key=eq.cutoff_enabled", single: true });
-    return d?.value !== "false"; // defaults to enabled if not set
+    const { data } = await supabase.from("cc_settings").select("value").eq("key", "cutoff_enabled").maybeSingle();
+    return data?.value !== "false"; // defaults to enabled if not set
   },
   setCutoffEnabled: async (enabled) => {
-    await supa("POST", "cc_settings", { body: { key: "cutoff_enabled", value: String(enabled) }, single: true });
+    const { error } = await supabase.from("cc_settings").upsert({ key: "cutoff_enabled", value: String(enabled) }, { onConflict: "key" });
+    if (error) throw error;
   },
   // FIX: fetch all three configurable cutoff times
   getCutoffTimes: async () => {
-    const [morning, evening, night] = await Promise.all([
-      supa("GET", "cc_settings", { filter: "select=value&key=eq.cutoff_morning", single: true }).catch(() => null),
-      supa("GET", "cc_settings", { filter: "select=value&key=eq.cutoff_evening", single: true }).catch(() => null),
-      supa("GET", "cc_settings", { filter: "select=value&key=eq.cutoff_night",   single: true }).catch(() => null),
-    ]);
+    const { data } = await supabase
+      .from("cc_settings")
+      .select("key, value")
+      .in("key", ["cutoff_morning", "cutoff_evening", "cutoff_night"]);
+    const map = {};
+    (data || []).forEach(row => { map[row.key] = row.value; });
     return {
-      morning: morning?.value || "20:00", // default 8:00 PM
-      evening: evening?.value || "18:00", // default 6:00 PM
-      night:   night?.value   || "21:00", // default 9:00 PM
+      morning: map.cutoff_morning || "20:00", // default 8:00 PM
+      evening: map.cutoff_evening || "18:00", // default 6:00 PM
+      night:   map.cutoff_night   || "21:00", // default 9:00 PM
     };
   },
   setCutoffTime: async (type, time) => {
-    await supa("POST", "cc_settings", { body: { key: `cutoff_${type}`, value: time }, single: true });
+    const { error } = await supabase.from("cc_settings").upsert({ key: `cutoff_${type}`, value: time }, { onConflict: "key" });
+    if (error) throw error;
   },
   // FIX: whether TLs can see the Admin Whitelist card
   getWhitelistVisible: async () => {
-    const d = await supa("GET", "cc_settings", { filter: "select=value&key=eq.whitelist_tl_visible", single: true });
-    return d?.value === "true";
+    const { data } = await supabase.from("cc_settings").select("value").eq("key", "whitelist_tl_visible").maybeSingle();
+    return data?.value === "true";
   },
   setWhitelistVisible: async (enabled) => {
-    await supa("POST", "cc_settings", { body: { key: "whitelist_tl_visible", value: String(enabled) }, single: true });
+    const { error } = await supabase.from("cc_settings").upsert({ key: "whitelist_tl_visible", value: String(enabled) }, { onConflict: "key" });
+    if (error) throw error;
   },
   getCutoffTLAccess: async () => {
-    const d = await supa("GET", "cc_settings", { filter: "select=value&key=eq.cutoff_tl_access", single: true });
-    return d?.value === "true"; // defaults to false (hidden from TLs)
+    const { data } = await supabase.from("cc_settings").select("value").eq("key", "cutoff_tl_access").maybeSingle();
+    return data?.value === "true"; // defaults to false (hidden from TLs)
   },
   setCutoffTLAccess: async (enabled) => {
-    await supa("POST", "cc_settings", { body: { key: "cutoff_tl_access", value: String(enabled) }, single: true });
+    const { error } = await supabase.from("cc_settings").upsert({ key: "cutoff_tl_access", value: String(enabled) }, { onConflict: "key" });
+    if (error) throw error;
   },
+  // FIX (Phase 4): no longer auto-creates the ADMIN account from the
+  // browser — client-side code creating a brand-new privileged account
+  // with a hardcoded password was flagged in the security audit as a real
+  // problem, independent of RLS. This now only checks whether one exists
+  // and logs a warning if not; creating it is a one-time manual step (via
+  // the SQL editor, or a future setup script) rather than something that
+  // silently happens on anyone's first page load.
   seedAdmin: async () => {
     try {
-      const d = await supa("GET", "cc_users", { filter: "select=id&emp_id=eq.ADMIN", single: true }).catch(() => null);
-      if (!d) {
-        await supa("POST", "cc_users", {
-          body: {
-            id: uid(), name: "Administrator", emp_id: "ADMIN", password: "admin123",
-            role: "admin", phone: "", addresses: [], roster_data: {}, created_at: todayStr()
-          }
-        });
+      const { data } = await supabase.from("cc_users").select("id").eq("emp_id", "ADMIN").maybeSingle();
+      if (!data) {
+        console.warn("No ADMIN account found. Create one manually (see SETUP notes) — automatic seeding was removed for security reasons.");
       }
     } catch (e) {
-      console.warn("seedAdmin failed (tables may not exist yet):", e.message);
+      console.warn("seedAdmin check failed (tables may not exist yet):", e.message);
     }
   },
 };
