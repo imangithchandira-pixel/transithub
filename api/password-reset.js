@@ -53,15 +53,20 @@ export default async function handler(req, res) {
         .eq("emp_id", empId)
         .maybeSingle();
 
-      // Deliberately vague on "not found" vs "no email on file" would leak
-      // less, but this app's existing UX already distinguishes them, so we
-      // keep that behavior rather than changing product behavior as a
-      // side-effect of the security fix.
-      // FIX: same distinction as api/login.js — a real DB/connection error
-      // now surfaces differently from a genuine "no such account."
-      if (error) return res.status(500).json({ error: "Database error: " + error.message });
-      if (!user) return res.status(404).json({ error: "No account found with that Employee ID." });
-      if (!user.email) return res.status(400).json({ error: "No email is on file for this account. Ask your Admin/Team Leader to reset it for you." });
+      if (error) {
+        console.error("api/password-reset: database error looking up user:", error.message);
+        return res.status(500).json({ error: "Something went wrong. Please try again." });
+      }
+
+      // FIX (Phase 5): previously returned a distinguishable message for "no
+      // such account" vs "account exists but has no email on file" — that
+      // let anyone probe which Employee IDs are real without ever needing a
+      // password. Both cases, and a real success, now look identical from
+      // the outside; the difference only matters server-side, in whether an
+      // email actually gets sent.
+      if (!user || !user.email) {
+        return res.status(200).json({ ok: true, maskedEmail: "your registered email" });
+      }
 
       const code = genCode();
       const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -70,11 +75,16 @@ export default async function handler(req, res) {
         .from("cc_users")
         .update({ reset_otp: code, reset_otp_expires: expires })
         .eq("id", user.id);
-      if (otpErr) return res.status(500).json({ error: "Could not start reset: " + otpErr.message });
+      if (otpErr) {
+        console.error("api/password-reset: could not store OTP:", otpErr.message);
+        return res.status(500).json({ error: "Something went wrong. Please try again." });
+      }
 
       // FIX: wrap the EmailJS send specifically, since its errors don't
       // always have a normal .message property — without this, a failure
-      // here surfaced as the unhelpful "Unexpected error: undefined".
+      // here surfaced as the unhelpful "Unexpected error: undefined". Now
+      // logged in full server-side (Vercel function logs), with a generic
+      // message returned to the client.
       try {
         await send(
           process.env.EMAILJS_SERVICE_ID,
@@ -84,7 +94,8 @@ export default async function handler(req, res) {
         );
       } catch (emailErr) {
         const detail = emailErr?.message || emailErr?.text || emailErr?.status || JSON.stringify(emailErr) || "unknown error";
-        return res.status(500).json({ error: "Could not send email: " + detail });
+        console.error("api/password-reset: EmailJS send failed:", detail);
+        return res.status(500).json({ error: "Could not send the reset email. Please try again shortly, or contact your Admin." });
       }
 
       return res.status(200).json({ ok: true, maskedEmail: maskEmail(user.email) });
@@ -93,7 +104,7 @@ export default async function handler(req, res) {
     // ─── Step 2: "verify" — check the code, set the new password ─────────
     if (step === "verify") {
       if (!empId || !otp || !newPassword) return res.status(400).json({ error: "Missing fields" });
-      if (newPassword.length < 4) return res.status(400).json({ error: "Password must be at least 4 characters." });
+      if (newPassword.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
 
       const { data: user, error } = await supabaseAdmin
         .from("cc_users")
@@ -101,7 +112,11 @@ export default async function handler(req, res) {
         .eq("emp_id", empId)
         .maybeSingle();
 
-      if (error || !user || !user.reset_otp) {
+      if (error) {
+        console.error("api/password-reset: database error during verify:", error.message);
+        return res.status(500).json({ error: "Something went wrong. Please try again." });
+      }
+      if (!user || !user.reset_otp) {
         return res.status(400).json({ error: "Code expired or not found. Please request a new one." });
       }
       if (user.reset_otp !== otp) {
@@ -117,7 +132,10 @@ export default async function handler(req, res) {
       if (authId) {
         // Already has a Supabase Auth account — just change its password.
         const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(authId, { password: newPassword });
-        if (updateErr) return res.status(500).json({ error: "Failed: " + updateErr.message });
+        if (updateErr) {
+          console.error("api/password-reset: updateUserById failed:", updateErr.message);
+          return res.status(500).json({ error: "Something went wrong. Please try again." });
+        }
       } else {
         // Never logged in since the migration, so no Auth account exists
         // yet — create it directly with the new password.
@@ -126,7 +144,10 @@ export default async function handler(req, res) {
           password: newPassword,
           email_confirm: true,
         });
-        if (createErr) return res.status(500).json({ error: "Failed: " + createErr.message });
+        if (createErr) {
+          console.error("api/password-reset: createUser failed:", createErr.message);
+          return res.status(500).json({ error: "Something went wrong. Please try again." });
+        }
         authId = created.user.id;
       }
 
@@ -136,17 +157,17 @@ export default async function handler(req, res) {
         .from("cc_users")
         .update({ auth_id: authId, reset_otp: null, reset_otp_expires: null })
         .eq("id", user.id);
-      if (clearErr) return res.status(500).json({ error: "Failed: " + clearErr.message });
+      if (clearErr) {
+        console.error("api/password-reset: clearing OTP failed:", clearErr.message);
+        return res.status(500).json({ error: "Something went wrong. Please try again." });
+      }
 
       return res.status(200).json({ ok: true });
     }
 
     return res.status(400).json({ error: "Unknown step" });
   } catch (e) {
-    // FIX: fall back gracefully when the caught value doesn't have a normal
-    // .message (some SDKs throw plain objects/strings) — this is what was
-    // previously showing up as the unhelpful "Unexpected error: undefined".
-    const detail = e?.message || (typeof e === "string" ? e : JSON.stringify(e)) || "unknown error";
-    return res.status(500).json({ error: "Unexpected error: " + detail });
+    console.error("api/password-reset: unexpected error:", e?.message || e);
+    return res.status(500).json({ error: "Something went wrong. Please try again." });
   }
 }
