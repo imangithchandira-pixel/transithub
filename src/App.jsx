@@ -1032,6 +1032,19 @@ function AuthScreen({ onLogin }) {
       }
 
       const user = userFromDb(profile);
+      // FIX: apply this device's saved theme now that we've confirmed a
+      // real login — this is the fresh-sign-in counterpart to the same fix
+      // already in the session-restore path (root App()'s boot effect).
+      // Missing it here meant the Dark Mode toggle could show "on" (it
+      // reads localStorage directly) while the actual colors stayed light,
+      // any time someone logged in fresh rather than just reloading an
+      // already-open session.
+      const savedTheme = getSavedDesktopTheme();
+      if (savedTheme === "dark") {
+        Object.assign(C, DARK_SURFACE);
+        const el = document.getElementById("th-desktop-style");
+        if (el) el.textContent = buildCSS();
+      }
       DB.touchActivity(user.id);
       setLoading(false);
       onLogin(user);
