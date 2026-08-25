@@ -108,7 +108,7 @@ export default async function handler(req, res) {
     if (action === "reset_password") {
       const { targetUserId, newPassword } = req.body;
       if (!targetUserId || !newPassword) return res.status(400).json({ error: "Missing fields." });
-      if (newPassword.length < 4) return res.status(400).json({ error: "Password must be at least 4 characters." });
+      if (newPassword.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
 
       const { data: target, error: targetErr } = await supabaseAdmin
         .from("cc_users").select("id, emp_id, auth_id").eq("id", targetUserId).maybeSingle();
