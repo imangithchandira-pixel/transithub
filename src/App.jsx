@@ -657,6 +657,7 @@ const buildCSS = () => `@import url('https://fonts.googleapis.com/css2?family=Pl
  .auth-seg-btn.active{background:${C.cyan};color:#fff;box-shadow:0 3px 10px rgba(0,180,216,.35)}
  @media(max-width:900px){.auth-brand{display:none} .auth-mobile-brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:22px} .auth-panel{padding:32px 18px}}
  ::-webkit-scrollbar{width:5px;height:5px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px}
+ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus{-webkit-text-fill-color:${C.text}!important;-webkit-box-shadow:0 0 0 1000px ${C.grey0} inset!important;transition:background-color 9999s ease-in-out 0s}
  @media(max-width:768px){
   .shell{flex-direction:column}
   .sidebar{display:none}
@@ -3826,7 +3827,7 @@ function AdminDashboard({ user, onLogout }) {
                   {users.map(u => {
                     const isTL = u.role === "admin";
                     return (
-                    <tr key={u.id} style={isTL ? { background: "#EDE9FE" } : {}}>
+                    <tr key={u.id} style={isTL ? { background: "#EDE9FE", color: "#0D3D56" } : {}}>
                       <td style={{ fontWeight: 700 }}>
                         {u.empId}
                         {isTL && <span className="badge badge-purple" style={{ marginLeft: 6, fontSize: 10 }}>TL</span>}
@@ -3836,7 +3837,7 @@ function AdminDashboard({ user, onLogout }) {
                       <td style={{ fontSize: 12 }}>{u.email || <span style={{ color: C.border }}>Not set</span>}</td>
                       <td>{(u.addresses || []).map(a => <span key={a.id} className="badge badge-cyan" style={{ marginRight: 4 }}>{a.label}</span>)}</td>
                       <td>{Object.keys(u.rosterData || {}).map(mk => <span key={mk} className="badge badge-grey" style={{ marginRight: 4 }}>{mk}</span>)}</td>
-                      <td style={{ fontSize: 12, color: C.muted }}>{u.createdAt}</td>
+                      <td style={{ fontSize: 12, color: isTL ? "#64748B" : C.muted }}>{u.createdAt}</td>
                       <td>
                         {isSuperAdmin && !isTL && (
                           resetPwUserId === u.id ? (
