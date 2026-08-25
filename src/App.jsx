@@ -879,7 +879,7 @@ function AuthScreen({ onLogin }) {
     if (!f.email.includes("@") || !f.email.includes(".")) return setMsg({ t: "err", m: "Please enter a valid email address." });
     if (!f.email.toLowerCase().endsWith("@mobitel.lk")) return setMsg({ t: "err", m: "Only @mobitel.lk email addresses are allowed." });
     if (f.password !== f.confirm) return setMsg({ t: "err", m: "Passwords do not match." });
-    if (f.password.length < 4) return setMsg({ t: "err", m: "Password must be at least 4 characters." });
+    if (f.password.length < 8) return setMsg({ t: "err", m: "Password must be at least 8 characters." });
     setLoading(true);
     try {
       // FIX (Phase 3): existence check now goes through check_emp_id_status()
@@ -975,13 +975,13 @@ function AuthScreen({ onLogin }) {
     setLoading(false);
   };
 
+  // FIX (Phase 5): the server (api/login.js) now does its own real rate
+  // limiting via cc_login_attempts — the old client-side LockoutStore
+  // pre-check is removed rather than kept alongside it, since running both
+  // would double-count and easily drift out of sync (client blocking based
+  // on a stale local counter while the server has a different, real one).
+  // The server's response message is now shown directly, whichever it is.
   const doLogin = async () => {
-    // FIX: check lockout before even hitting the database
-    if (LockoutStore.isLocked(f.empId)) {
-      const secs = LockoutStore.lockedSecondsLeft(f.empId);
-      const mins = Math.ceil(secs / 60);
-      return setMsg({ t: "err", m: `Too many failed attempts. Try again in ${mins} minute${mins !== 1 ? "s" : ""}.` });
-    }
     setLoading(true);
     try {
       const authEmail = authEmailFor(f.empId);
@@ -1004,17 +1004,9 @@ function AuthScreen({ onLogin }) {
         const bridgeData = await bridgeRes.json().catch(() => ({}));
         if (!bridgeRes.ok) {
           setLoading(false);
-          // FIX: a 401 here is a genuine wrong-credentials attempt — keep
-          // the attempt-counting UX. Anything else (500, etc.) is a real
-          // server/config error, and the generic "wrong password" message
-          // was previously shown even then, hiding the actual reason —
-          // this is exactly what made the earlier debugging so confusing.
-          if (bridgeRes.status === 401) {
-            const attempts = LockoutStore.recordFail(f.empId);
-            const remaining = MAX_ATTEMPTS - attempts;
-            if (remaining <= 0) return setMsg({ t: "err", m: `Too many failed attempts. Account locked for 15 minutes.` });
-            return setMsg({ t: "err", m: `Invalid Employee ID or password. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.` });
-          }
+          // FIX: the server's message is shown as-is now — it already
+          // includes the real remaining-attempts count (401) or lockout
+          // notice (429), computed from its own server-side counter.
           return setMsg({ t: "err", m: bridgeData.error || "Login failed. Please try again." });
         }
         // Bridge succeeded — the Auth account now exists, retry the real sign-in.
@@ -1038,7 +1030,6 @@ function AuthScreen({ onLogin }) {
         return setMsg({ t: "err", m: "Signed in, but couldn't load your profile. Contact your Admin." });
       }
 
-      LockoutStore.clear(f.empId); // FIX: clear lockout on successful login
       const user = userFromDb(profile);
       DB.touchActivity(user.id);
       setLoading(false);
@@ -1120,7 +1111,7 @@ function AuthScreen({ onLogin }) {
   const verifyAndReset = async () => {
     if (!fgOtp) return setFgMsg({ t: "err", m: "Enter the code sent to your email." });
     if (!fgNewPw || !fgConfirmPw) return setFgMsg({ t: "err", m: "Enter and confirm your new password." });
-    if (fgNewPw.length < 4) return setFgMsg({ t: "err", m: "New password must be at least 4 characters." });
+    if (fgNewPw.length < 8) return setFgMsg({ t: "err", m: "New password must be at least 8 characters." });
     if (fgNewPw !== fgConfirmPw) return setFgMsg({ t: "err", m: "Passwords do not match." });
     setFgLoading(true);
     try {
@@ -1743,7 +1734,7 @@ function ProfilePage({ user, onUpdate }) {
   // wrongly rejected every correct password for those accounts.
   const changePassword = async () => {
     if (!curPw || !newPw || !confirmPw) return setPwMsg({ t: "err", m: "All fields are required." });
-    if (newPw.length < 4) return setPwMsg({ t: "err", m: "New password must be at least 4 characters." });
+    if (newPw.length < 8) return setPwMsg({ t: "err", m: "New password must be at least 8 characters." });
     if (newPw !== confirmPw) return setPwMsg({ t: "err", m: "New passwords do not match." });
     if (curPw === newPw) return setPwMsg({ t: "err", m: "New password must be different from the current one." });
     setPwLoading(true);
@@ -3653,8 +3644,8 @@ function AdminDashboard({ user, onLogout }) {
   // resetting someone ELSE's password needs the same service-role access.
   // This is the fallback path when an employee's reset email never arrives.
   const resetEmployeePassword = async (u) => {
-    if (!resetPwValue || resetPwValue.length < 4) {
-      setResetPwMsg({ t: "err", m: "Password must be at least 4 characters." });
+    if (!resetPwValue || resetPwValue.length < 8) {
+      setResetPwMsg({ t: "err", m: "Password must be at least 8 characters." });
       return;
     }
     try {
@@ -4973,7 +4964,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
   // the real Auth password on confirm, not just the legacy column.
   const changePassword = async () => {
     if (!curPw || !newPw || !confirmPw) return setPwMsg({ t: "err", m: "All fields are required." });
-    if (newPw.length < 4) return setPwMsg({ t: "err", m: "New password must be at least 4 characters." });
+    if (newPw.length < 8) return setPwMsg({ t: "err", m: "New password must be at least 8 characters." });
     if (newPw !== confirmPw) return setPwMsg({ t: "err", m: "New passwords do not match." });
     if (curPw === newPw) return setPwMsg({ t: "err", m: "New password must be different from the current one." });
     setPwLoading(true);
