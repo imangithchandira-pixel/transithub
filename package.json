@@ -15,7 +15,8 @@
     "@emailjs/browser": "^4.3.3",
     "bcryptjs": "^2.4.3",
      "@supabase/supabase-js": "^2.112.3",
-    "@emailjs/nodejs": "^5.0.2"
+    "@emailjs/nodejs": "^5.0.2",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
