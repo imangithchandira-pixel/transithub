@@ -53,6 +53,75 @@ const callAdminAction = async (body) => {
   return data;
 };
 
+// ─── Push notification reminders ───────────────────────────────────────────
+// Public VAPID key — safe to ship in the client, this is how the app
+// identifies itself to push services; only the matching PRIVATE key
+// (server-side only, in api/send-reminders.js) can actually sign a
+// notification, so this being public doesn't let anyone else send push
+// messages using this app's identity.
+const VAPID_PUBLIC_KEY = "BMGB2VjtEaIkFjBTp8GoTiUGE1rlU2QiuB4zWVMQ82zOEMWzg1H-pdMAJtgSJZOqRzU6THKxtnycScEm4JqkofA";
+
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const output = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) output[i] = rawData.charCodeAt(i);
+  return output;
+};
+
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isStandalone = () => window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+
+// Returns the current subscription state for THIS device, if any — used to
+// show the toggle as on/off correctly when the Profile page loads.
+const getPushSubscription = async () => {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+    if (!reg) return null;
+    return await reg.pushManager.getSubscription();
+  } catch { return null; }
+};
+
+const enablePushReminders = async (user) => {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return { ok: false, error: "Push notifications aren't supported in this browser." };
+  }
+  // FIX: iOS Safari can only receive push notifications once the site has
+  // been added to the Home Screen — a regular Safari tab can't subscribe at
+  // all, so this checks for that up front with a clear instruction instead
+  // of letting the subscribe call fail with a confusing browser error.
+  if (isIOS() && !isStandalone()) {
+    return { ok: false, error: "On iPhone, first add TransitHub to your Home Screen (Share button → Add to Home Screen), then open it from there and try again." };
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    return { ok: false, error: "Notification permission was not granted." };
+  }
+  const reg = await navigator.serviceWorker.register("/sw.js");
+  await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+  });
+  const subJson = sub.toJSON();
+  const { error } = await supabase.from("cc_push_subscriptions").upsert({
+    id: uid(), user_id: user.id,
+    endpoint: subJson.endpoint, p256dh: subJson.keys.p256dh, auth: subJson.keys.auth,
+  }, { onConflict: "endpoint" });
+  if (error) return { ok: false, error: "Saved locally, but couldn't register on the server: " + error.message };
+  return { ok: true };
+};
+
+const disablePushReminders = async () => {
+  const sub = await getPushSubscription();
+  if (sub) {
+    await supabase.from("cc_push_subscriptions").delete().eq("endpoint", sub.endpoint).then(() => {}, () => {});
+    await sub.unsubscribe().catch(() => {});
+  }
+};
+
 // ─── Password helpers ─────────────────────────────────────────────────────────
 const BCRYPT_ROUNDS = 10;
 const isHashed    = (pw) => typeof pw === "string" && pw.startsWith("$2");
@@ -209,18 +278,45 @@ const todayStr = () => {
 const nowYear = () => new Date().getFullYear();
 const nowMonth = () => new Date().getMonth() + 1;
 
+// FIX: converts a data: URI into a real Blob, since the download helper
+// below now uses Blob URLs instead of raw data URIs (see note there).
+const dataUriToBlob = (dataUri) => {
+  const [header, data] = dataUri.split(",");
+  const mime = (header.match(/data:([^;]+)/) || [])[1] || "application/octet-stream";
+  let bytes;
+  if (header.includes("base64")) {
+    const binary = atob(data);
+    bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  } else {
+    bytes = new TextEncoder().encode(decodeURIComponent(data));
+  }
+  return new Blob([bytes], { type: mime });
+};
+
 // FIX: universal download helper — works on corporate networks that block blob/data URI downloads
 // Tries three methods in order: anchor click → window.open → new tab with content
+// FIX: switched from a raw data: URI to a real Blob + object URL. Modern
+// Chrome has grown increasingly aggressive about flagging data: URI
+// downloads as suspicious — especially several exports in a row with
+// similar filenames — and silently blocking them behind a manual "needs
+// permission" prompt in download history, even though nothing is actually
+// wrong with the file. Blob URLs are the standard, browser-trusted way
+// client-side downloads are expected to work, and this fixes every export
+// in the app at once (CSV, Transport Excel, Dinner Excel) since they all
+// share this one function.
 const triggerDownload = (filename, dataUri) => {
   try {
-    // Method 1: standard anchor click
+    const blob = dataUriToBlob(dataUri);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = dataUri;
+    a.href = url;
     a.download = filename;
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (e) {
     try {
       // Method 2: window.open with data URI
@@ -810,6 +906,7 @@ const Ico = ({ n, s = 16, c = "currentColor" }) => {
     lock:     "M12 17a2 2 0 002-2 2 2 0 00-2-2 2 2 0 00-2 2 2 2 0 002 2zm6-9a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h1V6a5 5 0 0110 0v2h1zm-6-5a3 3 0 00-3 3v2h6V6a3 3 0 00-3-3z",
     sun:      "M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91l-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91l1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z",
     moon:     "M9.37 5.51A7.35 7.35 0 009.1 7.5c0 4.08 3.32 7.4 7.4 7.4.68 0 1.35-.09 1.99-.27A7.014 7.014 0 0112 19c-3.86 0-7-3.14-7-7 0-2.93 1.81-5.45 4.37-6.49z",
+    bell:     "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z",
   };
   return <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d={paths[n] || ""} /></svg>;
 };
@@ -1723,6 +1820,27 @@ function ProfilePage({ user, onUpdate }) {
     applyDesktopTheme(next);
   };
 
+  // FIX: push-notification reminder toggle state (shared logic with mobile)
+  const [pushOn, setPushOn] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushMsg, setPushMsg] = useState(null);
+  useEffect(() => {
+    getPushSubscription().then(sub => setPushOn(!!sub));
+  }, []);
+  const togglePush = async () => {
+    setPushLoading(true);
+    setPushMsg(null);
+    if (pushOn) {
+      await disablePushReminders();
+      setPushOn(false);
+    } else {
+      const result = await enablePushReminders(user);
+      if (result.ok) setPushOn(true);
+      else setPushMsg({ t: "err", m: result.error });
+    }
+    setPushLoading(false);
+  };
+
   // FIX: change password OTP state
   const [curPw,     setCurPw]     = useState("");
   const [newPw,     setNewPw]     = useState("");
@@ -1875,6 +1993,31 @@ function ProfilePage({ user, onUpdate }) {
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{theme === "dark" ? "Dark Mode" : "Light Mode"}</div>
             <div style={{ fontSize: 12, color: C.muted }}>Applies across the whole app on this device.</div>
+          </div>
+        </div>
+      </div>
+      <div className="card">
+        <div className="sec-title">Notifications</div>
+        {pushMsg && <div className="alert alert-err">{pushMsg.m}</div>}
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            onClick={pushLoading ? undefined : togglePush}
+            style={{
+              width: 52, height: 28, borderRadius: 14, cursor: pushLoading ? "default" : "pointer",
+              background: pushOn ? C.cyan : C.border, opacity: pushLoading ? 0.6 : 1,
+              position: "relative", transition: "background .2s", flexShrink: 0,
+            }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: "50%", background: "#fff",
+              position: "absolute", top: 3,
+              left: pushOn ? 27 : 3,
+              transition: "left .2s",
+              boxShadow: "0 1px 4px rgba(0,0,0,.2)",
+            }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>Shift Reminders</div>
+            <div style={{ fontSize: 12, color: C.muted }}>{pushLoading ? "Working…" : pushOn ? "On — you'll get a notification the evening before any shift you haven't applied for yet." : "Off — get a reminder the evening before your shift."}</div>
           </div>
         </div>
       </div>
@@ -4941,6 +5084,27 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
   const [pwOtpCode, setPwOtpCode] = useState("");
   const [pwOtpExpiry, setPwOtpExpiry] = useState(0);
 
+  // FIX: push-notification reminder toggle state
+  const [pushOn, setPushOn] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushMsg, setPushMsg] = useState(null);
+  useEffect(() => {
+    getPushSubscription().then(sub => setPushOn(!!sub));
+  }, []);
+  const togglePush = async () => {
+    setPushLoading(true);
+    setPushMsg(null);
+    if (pushOn) {
+      await disablePushReminders();
+      setPushOn(false);
+    } else {
+      const result = await enablePushReminders(user);
+      if (result.ok) setPushOn(true);
+      else setPushMsg({ t: "err", m: result.error });
+    }
+    setPushLoading(false);
+  };
+
   const savePhone = async () => {
     const updated = { ...user, phone };
     await DB.updateUser(updated);
@@ -5098,6 +5262,28 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
       </div>
 
       <div className="m-card"><div className="m-card-pad">
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--m-text)" }}>Notifications</div>
+      </div>
+        {pushMsg && <div className="m-alert m-alert-err" style={{ margin: "0 16px 10px" }}>{pushMsg.m}</div>}
+        <div className="m-toggle-row">
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Ico n="bell" s={18} c="var(--m-accent)" />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m-text)" }}>Shift Reminders</div>
+              <div style={{ fontSize: 12, color: "var(--m-muted)" }}>{pushLoading ? "Working…" : pushOn ? "On — reminded the evening before your shift" : "Off"}</div>
+            </div>
+          </div>
+          <button
+            className="m-switch"
+            disabled={pushLoading}
+            style={{ background: pushOn ? C.cyan : "var(--m-border)", opacity: pushLoading ? 0.6 : 1 }}
+            onClick={togglePush}>
+            <span className="m-switch-knob" style={{ left: pushOn ? 22 : 2 }} />
+          </button>
+        </div>
+      </div>
+
+      <div className="m-card"><div className="m-card-pad">
         <label className="m-label" style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Ico n="lock" s={13} c="var(--m-muted)" />Change Password</label>
         {pwMsg && <div className={`m-alert m-alert-${pwMsg.t === "err" ? "err" : "ok"}`} style={{ margin: "0 0 10px" }}>{pwMsg.m}</div>}
         {pwStep === "form" ? (
@@ -5219,6 +5405,23 @@ export default function App() {
         });
       }
     } catch (e) { /* localStorage unavailable — skip cleanup silently */ }
+
+    // FIX: fallback trigger for the day-before shift reminder — the real,
+    // reliable mechanism is the Vercel Cron job (see vercel.json), which
+    // runs once daily regardless of whether anyone opens the app. This
+    // client-side call exists only as a belt-and-suspenders backup (e.g. if
+    // the cron job isn't set up yet), so it's fine to call it fairly often —
+    // the server itself only ever actually sends once per calendar day
+    // (see the date check in api/send-reminders.js), so extra calls here
+    // are just harmless no-ops on the server, not a way to over-send.
+    try {
+      const REMIND_KEY = "cc_last_reminder_check";
+      const last = Number(localStorage.getItem(REMIND_KEY) || 0);
+      if (Date.now() - last > 60 * 60 * 1000) {
+        localStorage.setItem(REMIND_KEY, String(Date.now()));
+        fetch("/api/send-reminders", { method: "POST" }).catch(() => {});
+      }
+    } catch (e) { /* localStorage unavailable — skip silently */ }
 
     return () => {
       document.head.removeChild(el);
