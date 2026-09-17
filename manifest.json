@@ -1,0 +1,15 @@
+{
+  "name": "TransitHub",
+  "short_name": "TransitHub",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D3D56",
+  "theme_color": "#0D3D56",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
