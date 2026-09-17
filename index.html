@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TransitHub</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- FIX: without these, iOS Safari's "Add to Home Screen" just creates a
+         bookmark that opens a regular Safari tab — it LOOKS like its own
+         app icon, but under the hood it has no standalone display context,
+         which is exactly why the Web Push API isn't available even on a
+         fully supported iOS version. These tags are what tell iOS to treat
+         it as a true installed app instead. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TransitHub" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Web app manifest — same "installable, standalone app" declaration,
+         read by Chrome/Android and modern iOS alike. -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0D3D56" />
   </head>
   <body>
     <div id="root"></div>
