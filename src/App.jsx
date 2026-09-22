@@ -3784,7 +3784,7 @@ function AdminDashboard({ user, onLogout }) {
       const raw = await DB.getAdmins();
       setAdmins(raw);
       setAdminForm({ name: "", empId: "", password: "", email: "" });
-      setAdminMsg({ t: "ok", m: `Team Leader "${adminForm.name}" created successfully.` });
+      setAdminMsg({ t: "ok", m: `Admin "${adminForm.name}" created successfully.` });
     } catch (e) {
       setAdminMsg({ t: "err", m: "Failed: " + e.message });
     }
@@ -3863,7 +3863,7 @@ function AdminDashboard({ user, onLogout }) {
           <div className="sb-user-name">{adminUser?.name || "Administrator"}</div>
           <div className="sb-user-id">{adminUser?.empId || "ADMIN"}</div>
           <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", marginTop: 2, fontWeight: 600 }}>
-            {isSuperAdmin ? "Super Admin" : "Team Leader"}
+            {isSuperAdmin ? "Super Admin" : "Admin"}
           </div>
         </div>
         <div className="sb-div" />
@@ -3986,7 +3986,7 @@ function AdminDashboard({ user, onLogout }) {
                     <tr key={u.id} style={isTL ? { background: "#EDE9FE", color: "#0D3D56" } : {}}>
                       <td style={{ fontWeight: 700 }}>
                         {u.empId}
-                        {isTL && <span className="badge badge-purple" style={{ marginLeft: 6, fontSize: 10 }}>TL</span>}
+                        {isTL && <span className="badge badge-purple" style={{ marginLeft: 6, fontSize: 10 }}>Admin</span>}
                       </td>
                       <td>{u.name}</td>
                       <td style={{ fontSize: 12 }}>{u.phone || "—"}</td>
@@ -4036,12 +4036,12 @@ function AdminDashboard({ user, onLogout }) {
             )}
 
             <div className="card">
-              <div className="sec-title">👥 Team Leader Accounts</div>
+              <div className="sec-title">👥 Admin Accounts</div>
               <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
                 Create admin accounts for team leaders — they get full access to the dashboard.
               </div>
               <div style={{ background: C.ice, borderRadius: 12, padding: 16, marginBottom: 16, border: `1.5px solid ${C.borderLight}` }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12 }}>➕ Create New Team Leader</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12 }}>➕ Create New Admin</div>
                 {adminMsg && <div className={`alert alert-${adminMsg.t === "err" ? "err" : "ok"}`}>{adminMsg.m}</div>}
                 <div className="g3" style={{ marginBottom: 12 }}>
                   <div>
@@ -4066,7 +4066,7 @@ function AdminDashboard({ user, onLogout }) {
                   </div>
                 </div>
                 <button className="btn btn-cyan" onClick={createAdmin} disabled={adminLoading}>
-                  <Ico n="plus" s={14} />{adminLoading ? "Creating…" : "Create Team Leader"}
+                  <Ico n="plus" s={14} />{adminLoading ? "Creating…" : "Create Admin"}
                 </button>
               </div>
               <div className="sec-title" style={{ marginBottom: 10 }}>Current Admin Accounts ({admins.length})</div>
@@ -4110,7 +4110,7 @@ function AdminDashboard({ user, onLogout }) {
               <div className="card">
                 <div className="sec-title">⏰ Submission Cutoff</div>
                 <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
-                  When enabled, employees must submit transport requests before the deadlines below. Admins and Team Leaders always bypass the cutoff.
+                  When enabled, employees must submit transport requests before the deadlines below. Admins always bypass the cutoff.
                 </div>
 
                 {/* On/Off toggle */}
@@ -4192,7 +4192,7 @@ function AdminDashboard({ user, onLogout }) {
                 {/* FIX: TL access toggle — Super Admin only */}
                 {isSuperAdmin && (
                   <div style={{ borderTop: `1px solid ${C.grey1}`, paddingTop: 14 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 10 }}>Team Leader Access</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 10 }}>Admin Access</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                       <div
                         onClick={async () => {
@@ -4218,7 +4218,7 @@ function AdminDashboard({ user, onLogout }) {
                       </div>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 13, color: cutoffTLAccess ? C.cyan : C.muted }}>
-                          {cutoffTLSaving ? "Saving…" : cutoffTLAccess ? "Team Leaders can manage cutoff" : "Team Leaders cannot see cutoff settings"}
+                          {cutoffTLSaving ? "Saving…" : cutoffTLAccess ? "Admins can manage cutoff" : "Admins cannot see cutoff settings"}
                         </div>
                         <div style={{ fontSize: 12, color: C.muted }}>
                           {cutoffTLAccess ? "TLs can toggle cutoff on/off and change deadline times." : "Only Super Admin can manage cutoff settings."}
@@ -4482,7 +4482,7 @@ function MobileHome({ user, setScreen }) {
     <div>
       {user.role === "admin" && (
         <div className="m-alert m-alert-info" style={{ margin: "12px 16px 8px" }}>
-          You're signed in as {user.empId === "ADMIN" ? "Super Admin" : "a Team Leader"}. Team &amp; route management is available on the desktop app.
+          You're signed in as {user.empId === "ADMIN" ? "Super Admin" : "an Admin"}. Team &amp; route management is available on the desktop app.
         </div>
       )}
       <div style={{ padding: "0 16px 4px" }}>
