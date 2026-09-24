@@ -1309,7 +1309,7 @@ function AuthScreen({ onLogin }) {
 
           {mode === "login" && (
             <div className="stack-sm">
-              <div><label className="label">Employee ID</label><input className="input" placeholder="e.g. EMP001" value={f.empId} onChange={upd("empId")} /></div>
+              <div><label className="label">Employee ID</label><input className="input" placeholder="e.g. 00000" value={f.empId} onChange={upd("empId")} /></div>
               <div><label className="label">Password</label><input className="input" type="password" placeholder="••••••••" value={f.password} onChange={upd("password")} onKeyDown={e => e.key === "Enter" && doLogin()} /></div>
               <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12, marginTop: 4 }} onClick={doLogin} disabled={loading}>{loading ? "Signing in…" : "Sign In"}</button>
               <div style={{ textAlign: "center", marginTop: 4 }}>
@@ -1324,14 +1324,14 @@ function AuthScreen({ onLogin }) {
               <div className="g2">
                 <div>
                   <label className="label">Employee ID<span className="req">*</span></label>
-                  <input className="input" placeholder="EMP001" value={f.empId} onChange={upd("empId")} />
+                  <input className="input" placeholder="00000" value={f.empId} onChange={upd("empId")} />
                   {isWhitelisted && (
                     <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: C.cyan }}>
                       <Ico n="check" s={13} c={C.cyan} /> Admin access granted for this ID
                     </div>
                   )}
                 </div>
-                <div><label className="label">Contact No.</label><input className="input" placeholder="+94 77 000 0000" value={f.phone} onChange={upd("phone")} /></div>
+                <div><label className="label">Contact No.</label><input className="input" placeholder="070 000 0000" value={f.phone} onChange={upd("phone")} /></div>
               </div>
               <div>
                 <label className="label">Email<span className="req">*</span></label>
@@ -1383,7 +1383,7 @@ function AuthScreen({ onLogin }) {
 
               {fgStep === "request" && (
                 <>
-                  <div><label className="label">Employee ID</label><input className="input" placeholder="e.g. EMP001" value={fgEmpId} onChange={e => setFgEmpId(e.target.value)} onKeyDown={e => e.key === "Enter" && requestReset()} /></div>
+                  <div><label className="label">Employee ID</label><input className="input" placeholder="e.g. 00000" value={fgEmpId} onChange={e => setFgEmpId(e.target.value)} onKeyDown={e => e.key === "Enter" && requestReset()} /></div>
                   <button className="btn btn-cyan" style={{ width: "100%", justifyContent: "center", padding: 12, marginTop: 4 }} onClick={requestReset} disabled={fgLoading}>{fgLoading ? "Sending…" : "Send Code"}</button>
                 </>
               )}
@@ -2039,7 +2039,7 @@ function ProfilePage({ user, onUpdate }) {
           <div>
             <label className="label">Contact Number<span className="req">*</span></label>
             <div style={{ display: "flex", gap: 8 }}>
-              <input className="input" placeholder="+94 77 000 0000" value={phone} onChange={e => setPhone(e.target.value)} />
+              <input className="input" placeholder="070 000 0000" value={phone} onChange={e => setPhone(e.target.value)} />
               <button className="btn btn-cyan" onClick={savePhone}><Ico n="check" s={13} />Save</button>
             </div>
           </div>
@@ -2381,7 +2381,7 @@ function TransportForm({ user }) {
           <label className="label" style={{ margin: 0 }}>2. Contact Number<span className="req">*</span></label>
           {lu.phone && <AutoTag show={true} />}
         </div>
-        <input className={`input${form.phone ? " input-auto" : ""}`} placeholder="+94 77 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
+        <input className={`input${form.phone ? " input-auto" : ""}`} placeholder="070 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
       </div>
 
       {/* 3. Shift */}
@@ -2704,7 +2704,7 @@ function TransportForm({ user }) {
             </div>
             <div>
               <label className="label">2. Contact Number<span className="req">*</span></label>
-              <input className="input" placeholder="+94 77 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
+              <input className="input" placeholder="070 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
             </div>
             <div>
               <label className="label">3. Shift<span className="req">*</span></label>
@@ -3141,7 +3141,7 @@ function AdminRouteView({ apps, user }) {
             <div className="g3" style={{ marginBottom: 14 }}>
               <div>
                 <label className="label">Employee ID<span className="req">*</span></label>
-                <input className="input" placeholder="e.g. EMP001" value={addForm.empId}
+                <input className="input" placeholder="e.g. 00000" value={addForm.empId}
                   onChange={e => setAddForm(p => ({ ...p, empId: e.target.value }))} />
               </div>
               <div>
@@ -3171,7 +3171,7 @@ function AdminRouteView({ apps, user }) {
               </div>
               <div>
                 <label className="label">Contact No.</label>
-                <input className="input" placeholder="+94 77 000 0000" value={addForm.phone}
+                <input className="input" placeholder="070 000 0000" value={addForm.phone}
                   onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))} />
               </div>
               <div>
@@ -4748,7 +4748,7 @@ function MobileTransportForm({ user, onDone }) {
 
       <div className="m-card"><div className="m-card-pad">
         <label className="m-label">Contact Number</label>
-        <input className="m-input" placeholder="+94 77 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
+        <input className="m-input" placeholder="070 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
       </div></div>
 
       <div className="m-card"><div className="m-card-pad">
@@ -4919,7 +4919,7 @@ function MobileTransportForm({ user, onDone }) {
           </div></div>
           <div className="m-card"><div className="m-card-pad">
             <label className="m-label">Contact Number</label>
-            <input className="m-input" placeholder="+94 77 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
+            <input className="m-input" placeholder="070 000 0000" value={form.phone} onChange={e => set("phone", e.target.value)} />
           </div></div>
           <div className="m-card"><div className="m-card-pad">
             <label className="m-label">Shift (dinner-eligible only)</label>
@@ -5191,7 +5191,7 @@ function MobileProfile({ user, onUpdate, onLogout, theme, onThemeChange }) {
 
       <div className="m-card"><div className="m-card-pad">
         <label className="m-label">Contact Number</label>
-        <input className="m-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+94 77 000 0000" style={{ marginBottom: 10 }} />
+        <input className="m-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="070 000 0000" style={{ marginBottom: 10 }} />
         <button className="m-submit-btn" style={{ width: "100%", margin: 0 }} onClick={savePhone}>Save Number</button>
       </div></div>
 
